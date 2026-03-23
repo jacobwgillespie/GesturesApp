@@ -41,11 +41,11 @@ public enum GestureKind: String, CaseIterable, Codable, Hashable, Identifiable, 
         case .threeFingerTap:
             ShortcutBinding(keyCode: UInt16(kVK_Space), modifierFlags: [.command, .option])
         case .threeFingerSwipeDown:
-            ShortcutBinding(keyCode: UInt16(kVK_DownArrow), modifierFlags: [.command, .option])
+            ShortcutBinding(keyCode: UInt16(kVK_ANSI_W), modifierFlags: [.command])
         case .twoFingerTipTapLeft:
-            ShortcutBinding(keyCode: UInt16(kVK_ANSI_LeftBracket), modifierFlags: [.command, .option])
+            ShortcutBinding(keyCode: UInt16(kVK_LeftArrow), modifierFlags: [.command, .option])
         case .twoFingerTipTapRight:
-            ShortcutBinding(keyCode: UInt16(kVK_ANSI_RightBracket), modifierFlags: [.command, .option])
+            ShortcutBinding(keyCode: UInt16(kVK_RightArrow), modifierFlags: [.command, .option])
         }
     }
 
