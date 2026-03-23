@@ -22,10 +22,12 @@ struct DetectedGestureEntry: Identifiable {
 @MainActor
 final class AppModel: ObservableObject {
     static let shared = AppModel()
+    private static let debugModeDefaultsKey = "debugModeEnabled"
 
     @Published private(set) var isAccessibilityTrusted = false
     @Published private(set) var isCaptureRunning = false
     @Published private(set) var captureMessage = "Starting…"
+    @Published private(set) var isDebugModeEnabled = false
     @Published private(set) var lastGesture: GestureEvent?
     @Published private(set) var lastGestureObservedAt: Date?
     @Published private(set) var recentDetections: [DetectedGestureEntry] = []
@@ -37,14 +39,20 @@ final class AppModel: ObservableObject {
     private let dispatcher: ShortcutDispatching
     private let service: MultitouchService
     private let debugLogWriter: DebugLogWriter
+    private let userDefaults: UserDefaults
     private var hasBootstrapped = false
 
     private init(
         dispatcher: ShortcutDispatching? = nil,
         service: MultitouchService = MultitouchService(),
-        debugLogWriter: DebugLogWriter = .shared
+        debugLogWriter: DebugLogWriter = .shared,
+        userDefaults: UserDefaults = .standard
     ) {
+        let isDebugModeEnabled = userDefaults.bool(forKey: Self.debugModeDefaultsKey)
         self.debugLogWriter = debugLogWriter
+        self.userDefaults = userDefaults
+        self.isDebugModeEnabled = isDebugModeEnabled
+        debugLogWriter.setEnabled(isDebugModeEnabled)
         self.dispatcher = dispatcher ?? ShortcutDispatcher(logger: { message in
             debugLogWriter.append(message)
         })
@@ -72,8 +80,10 @@ final class AppModel: ObservableObject {
                     lastCallbackAt: diagnostics.lastCallbackAt,
                     statusSummary: diagnostics.statusSummary
                 )
-                self?.captureDiagnostics = state
-                self?.logDiagnostics(state)
+                guard let self else { return }
+                guard self.isDebugModeEnabled else { return }
+                self.captureDiagnostics = state
+                self.logDiagnostics(state)
             }
         }
     }
@@ -136,14 +146,38 @@ final class AppModel: ObservableObject {
         debugLogWriter.append("Debug log cleared")
     }
 
+    func setDebugModeEnabled(_ isEnabled: Bool) {
+        guard isDebugModeEnabled != isEnabled else { return }
+        isDebugModeEnabled = isEnabled
+        userDefaults.set(isEnabled, forKey: Self.debugModeDefaultsKey)
+        debugLogWriter.setEnabled(isEnabled)
+
+        if isEnabled {
+            debugLogWriter.append("Debug mode enabled")
+            refreshAccessibilityStatus()
+            if isCaptureRunning {
+                restartCapture()
+            }
+        } else {
+            clearDebugState()
+            if isCaptureRunning {
+                restartCapture()
+            }
+        }
+    }
+
     private func handle(_ event: GestureEvent) {
-        lastGesture = event
-        lastGestureObservedAt = Date()
+        if isDebugModeEnabled {
+            lastGesture = event
+            lastGestureObservedAt = Date()
+        }
         let configuration = store.binding(for: event.kind)
         guard configuration.isEnabled else {
             captureMessage = "Detected \(event.kind.displayName), but its mapping is disabled."
-            recordDetection(kind: event.kind, detail: "Detected only; mapping disabled")
-            debugLogWriter.append("Gesture detected: \(event.kind.displayName) | mapping disabled")
+            if isDebugModeEnabled {
+                recordDetection(kind: event.kind, detail: "Detected only; mapping disabled")
+                debugLogWriter.append("Gesture detected: \(event.kind.displayName) | mapping disabled")
+            }
             return
         }
 
@@ -151,13 +185,17 @@ final class AppModel: ObservableObject {
         let actionDescription = configuration.action.displayString
         if dispatched {
             captureMessage = "Triggered \(event.kind.displayName) → \(actionDescription)"
-            recordDetection(kind: event.kind, detail: "Sent \(actionDescription)")
-            debugLogWriter.append("Gesture detected: \(event.kind.displayName) | dispatched \(actionDescription)")
+            if isDebugModeEnabled {
+                recordDetection(kind: event.kind, detail: "Sent \(actionDescription)")
+                debugLogWriter.append("Gesture detected: \(event.kind.displayName) | dispatched \(actionDescription)")
+            }
         } else {
             refreshAccessibilityStatus()
             captureMessage = "Gesture detected, but Accessibility access is still required to send actions."
-            recordDetection(kind: event.kind, detail: "Detected only; shortcut dispatch blocked")
-            debugLogWriter.append("Gesture detected: \(event.kind.displayName) | dispatch blocked")
+            if isDebugModeEnabled {
+                recordDetection(kind: event.kind, detail: "Detected only; shortcut dispatch blocked")
+                debugLogWriter.append("Gesture detected: \(event.kind.displayName) | dispatch blocked")
+            }
         }
     }
 
@@ -172,6 +210,7 @@ final class AppModel: ObservableObject {
     }
 
     private func logFrame(_ frame: TouchFrame) {
+        guard isDebugModeEnabled else { return }
         let summary = frame.contacts.isEmpty
             ? "0 contacts"
             : frame.contacts
@@ -186,6 +225,7 @@ final class AppModel: ObservableObject {
     }
 
     private func logDiagnostics(_ diagnostics: CaptureDiagnosticsViewState) {
+        guard isDebugModeEnabled else { return }
         debugLogWriter.append(
             """
             Diagnostics: framework=\(diagnostics.frameworkLoaded ? "loaded" : "unavailable"), \
@@ -196,6 +236,13 @@ final class AppModel: ObservableObject {
             status=\"\(diagnostics.statusSummary)\"
             """
         )
+    }
+
+    private func clearDebugState() {
+        lastGesture = nil
+        lastGestureObservedAt = nil
+        recentDetections = []
+        captureDiagnostics = CaptureDiagnosticsViewState()
     }
 }
 

@@ -119,63 +119,83 @@ struct SettingsView: View {
             }
 
             SettingsScrollView {
-                SettingsSection("Capture Diagnostics") {
-                    settingsRow("Framework", value: model.captureDiagnostics.frameworkLoaded ? "Loaded" : "Unavailable")
-                    settingsRow("Enumerated Devices", value: "\(model.captureDiagnostics.enumeratedDeviceCount)")
-                    settingsRow("Started Devices", value: "\(model.captureDiagnostics.startedDeviceCount)")
-                    settingsRow("Registered Callbacks", value: "\(model.captureDiagnostics.successfulRegistrationCount)")
-                    settingsRow("Callback Count", value: "\(model.captureDiagnostics.callbackCount)")
-                    settingsRow(
-                        "Last Callback",
-                        value: model.captureDiagnostics.lastCallbackAt?.formatted(.dateTime.hour().minute().second()) ?? "Never"
+                SettingsSection("Debug Mode") {
+                    Toggle(
+                        "Enable debug mode",
+                        isOn: Binding(
+                            get: { model.isDebugModeEnabled },
+                            set: { model.setDebugModeEnabled($0) }
+                        )
                     )
 
-                    Text(model.captureDiagnostics.statusSummary)
+                    Text("When disabled, Gestures stops writing the debug log and does not keep gesture history or capture diagnostics in the UI.")
                         .foregroundStyle(.secondary)
                 }
 
-                SettingsSection("Detected Gestures") {
-                    if model.recentDetections.isEmpty {
-                        Text("No gestures detected yet. Use this view to confirm capture is working before testing action dispatch.")
+                if model.isDebugModeEnabled {
+                    SettingsSection("Capture Diagnostics") {
+                        settingsRow("Framework", value: model.captureDiagnostics.frameworkLoaded ? "Loaded" : "Unavailable")
+                        settingsRow("Enumerated Devices", value: "\(model.captureDiagnostics.enumeratedDeviceCount)")
+                        settingsRow("Started Devices", value: "\(model.captureDiagnostics.startedDeviceCount)")
+                        settingsRow("Registered Callbacks", value: "\(model.captureDiagnostics.successfulRegistrationCount)")
+                        settingsRow("Callback Count", value: "\(model.captureDiagnostics.callbackCount)")
+                        settingsRow(
+                            "Last Callback",
+                            value: model.captureDiagnostics.lastCallbackAt?.formatted(.dateTime.hour().minute().second()) ?? "Never"
+                        )
+
+                        Text(model.captureDiagnostics.statusSummary)
                             .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(model.recentDetections) { detection in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Text(detection.kind.displayName)
-                                    Spacer()
-                                    Text(detection.detectedAt.formatted(.dateTime.hour().minute().second()))
+                    }
+
+                    SettingsSection("Detected Gestures") {
+                        if model.recentDetections.isEmpty {
+                            Text("No gestures detected yet. Use this view to confirm capture is working before testing action dispatch.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(model.recentDetections) { detection in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text(detection.kind.displayName)
+                                        Spacer()
+                                        Text(detection.detectedAt.formatted(.dateTime.hour().minute().second()))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Text(detection.detail)
+                                        .font(.footnote)
                                         .foregroundStyle(.secondary)
                                 }
-                                Text(detection.detail)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
+                                .padding(.vertical, 2)
                             }
-                            .padding(.vertical, 2)
                         }
                     }
-                }
 
-                SettingsSection("Debug Log") {
-                    Text("High-volume touch diagnostics are written to disk instead of rendering live in settings.")
-                        .foregroundStyle(.secondary)
+                    SettingsSection("Debug Log") {
+                        Text("High-volume touch diagnostics are written to disk instead of rendering live in settings.")
+                            .foregroundStyle(.secondary)
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(model.debugLogPath)
-                            .font(.footnote.monospaced())
-                            .textSelection(.enabled)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(model.debugLogPath)
+                                .font(.footnote.monospaced())
+                                .textSelection(.enabled)
 
-                        HStack {
-                            Button("Open Log") {
-                                model.openDebugLog()
-                            }
-                            Button("Reveal in Finder") {
-                                model.revealDebugLogInFinder()
-                            }
-                            Button("Clear Log") {
-                                model.clearDebugLog()
+                            HStack {
+                                Button("Open Log") {
+                                    model.openDebugLog()
+                                }
+                                Button("Reveal in Finder") {
+                                    model.revealDebugLogInFinder()
+                                }
+                                Button("Clear Log") {
+                                    model.clearDebugLog()
+                                }
                             }
                         }
+                    }
+                } else {
+                    SettingsSection("Advanced Tools") {
+                        Text("Enable debug mode to view capture diagnostics, recent detected gestures, and the debug log.")
+                            .foregroundStyle(.secondary)
                     }
                 }
             }

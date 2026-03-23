@@ -6,7 +6,9 @@ final class DebugLogWriter: @unchecked Sendable {
     let logFileURL: URL
 
     private let queue = DispatchQueue(label: "Gestures.DebugLogWriter")
+    private let stateLock = NSLock()
     private let formatter: ISO8601DateFormatter
+    private var isEnabled = false
 
     private init() {
         let baseDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
@@ -25,6 +27,7 @@ final class DebugLogWriter: @unchecked Sendable {
     }
 
     func append(_ message: String) {
+        guard stateLock.withLock({ isEnabled }) else { return }
         let line = "[\(formatter.string(from: Date()))] \(message)\n"
         queue.async { [logFileURL] in
             guard let data = line.data(using: .utf8) else { return }
@@ -38,9 +41,23 @@ final class DebugLogWriter: @unchecked Sendable {
         }
     }
 
+    func setEnabled(_ enabled: Bool) {
+        stateLock.withLock {
+            isEnabled = enabled
+        }
+    }
+
     func clear() {
         queue.async { [logFileURL] in
             try? Data().write(to: logFileURL, options: .atomic)
         }
+    }
+}
+
+private extension NSLock {
+    func withLock<T>(_ operation: () throws -> T) rethrows -> T {
+        lock()
+        defer { unlock() }
+        return try operation()
     }
 }
