@@ -2,6 +2,7 @@ import SwiftUI
 
 struct GesturesCommands: Commands {
     @ObservedObject var model: AppModel
+    @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
@@ -13,7 +14,8 @@ struct GesturesCommands: Commands {
 
         CommandGroup(replacing: .appSettings) {
             Button("Settings…") {
-                AppNavigation.openSettings()
+                AppNavigation.activate()
+                openSettings()
             }
             .keyboardShortcut(",", modifiers: .command)
         }

@@ -2,13 +2,18 @@ import SwiftUI
 
 struct MenuBarContentView: View {
     @ObservedObject var model: AppModel
+    @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
-            SettingsLink {
+            Button {
+                AppNavigation.activate()
+                openSettings()
+            } label: {
                 Label("Settings…", systemImage: "gearshape")
             }
+            .keyboardShortcut(",", modifiers: .command)
 
             Button {
                 AppNavigation.activate()

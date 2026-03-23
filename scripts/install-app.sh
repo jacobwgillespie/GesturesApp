@@ -1,0 +1,143 @@
+#!/bin/zsh
+
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+APP_NAME="Gestures"
+EXECUTABLE_NAME="GesturesApp"
+BUNDLE_ID="${BUNDLE_ID:-com.jacobwgillespie.gestures}"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/Applications}"
+CONFIGURATION="${CONFIGURATION:-release}"
+BUILD_FLAGS=()
+
+usage() {
+  cat <<EOF
+Usage: scripts/install-app.sh [--debug] [--release] [--install-dir PATH]
+
+Builds the SwiftPM app, creates ${APP_NAME}.app, and installs it.
+
+Options:
+  --debug               Build the debug configuration
+  --release             Build the release configuration (default)
+  --install-dir PATH    Install destination (default: ~/Applications)
+  -h, --help            Show this help
+
+Environment overrides:
+  BUNDLE_ID             Bundle identifier (default: ${BUNDLE_ID})
+  INSTALL_DIR           Install destination
+  CONFIGURATION         debug or release
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --debug)
+      CONFIGURATION="debug"
+      shift
+      ;;
+    --release)
+      CONFIGURATION="release"
+      shift
+      ;;
+    --install-dir)
+      INSTALL_DIR="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  echo "This installer only supports macOS." >&2
+  exit 1
+fi
+
+if [[ "$CONFIGURATION" == "release" ]]; then
+  BUILD_FLAGS=(-c release)
+elif [[ "$CONFIGURATION" == "debug" ]]; then
+  BUILD_FLAGS=(-c debug)
+else
+  echo "Unsupported CONFIGURATION: $CONFIGURATION" >&2
+  exit 1
+fi
+
+cd "$ROOT_DIR"
+
+echo "Building ${EXECUTABLE_NAME} (${CONFIGURATION})..."
+swift build "${BUILD_FLAGS[@]}" --product "$EXECUTABLE_NAME"
+
+BIN_PATH="$(swift build "${BUILD_FLAGS[@]}" --show-bin-path)"
+EXECUTABLE_PATH="${BIN_PATH}/${EXECUTABLE_NAME}"
+
+if [[ ! -x "$EXECUTABLE_PATH" ]]; then
+  echo "Built executable not found at $EXECUTABLE_PATH" >&2
+  exit 1
+fi
+
+APP_DIR="$ROOT_DIR/.build/${APP_NAME}.app"
+CONTENTS_DIR="$APP_DIR/Contents"
+MACOS_DIR="$CONTENTS_DIR/MacOS"
+RESOURCES_DIR="$CONTENTS_DIR/Resources"
+INFO_PLIST="$CONTENTS_DIR/Info.plist"
+PKGINFO_PATH="$CONTENTS_DIR/PkgInfo"
+INSTALLED_APP_DIR="$INSTALL_DIR/${APP_NAME}.app"
+SHORT_VERSION="${MARKETING_VERSION:-0.1.0}"
+BUILD_VERSION="${CURRENT_PROJECT_VERSION:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
+
+echo "Creating app bundle..."
+rm -rf "$APP_DIR"
+mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
+cp "$EXECUTABLE_PATH" "$MACOS_DIR/$APP_NAME"
+
+cat > "$INFO_PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleExecutable</key>
+  <string>${APP_NAME}</string>
+  <key>CFBundleIdentifier</key>
+  <string>${BUNDLE_ID}</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>${APP_NAME}</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>${SHORT_VERSION}</string>
+  <key>CFBundleVersion</key>
+  <string>${BUILD_VERSION}</string>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.utilities</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>14.0</string>
+  <key>LSUIElement</key>
+  <true/>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>NSPrincipalClass</key>
+  <string>NSApplication</string>
+</dict>
+</plist>
+EOF
+
+printf 'APPL????' > "$PKGINFO_PATH"
+
+mkdir -p "$INSTALL_DIR"
+echo "Installing to $INSTALLED_APP_DIR..."
+rm -rf "$INSTALLED_APP_DIR"
+ditto "$APP_DIR" "$INSTALLED_APP_DIR"
+
+echo "Installed ${APP_NAME}.app"
+echo "App bundle: $INSTALLED_APP_DIR"

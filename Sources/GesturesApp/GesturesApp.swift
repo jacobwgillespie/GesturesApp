@@ -22,8 +22,8 @@ struct GesturesApp: App {
 
         Settings {
             SettingsView(model: model, store: model.store)
-                .frame(width: 760, height: 540)
         }
+        .windowResizability(.contentSize)
 
         Window("Troubleshooting", id: AppWindowID.troubleshooting) {
             TroubleshootingView(model: model)
