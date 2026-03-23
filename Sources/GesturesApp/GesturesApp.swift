@@ -16,11 +16,18 @@ struct GesturesApp: App {
         MenuBarExtra("Gestures", systemImage: "hand.tap.fill") {
             MenuBarContentView(model: model)
         }
-
-        Window("Settings", id: "settings") {
-            SettingsView(model: model, store: model.store)
-                .frame(minWidth: 640, minHeight: 500)
+        .commands {
+            GesturesCommands(model: model)
         }
-        .defaultSize(width: 640, height: 500)
+
+        Settings {
+            SettingsView(model: model, store: model.store)
+                .frame(width: 760, height: 540)
+        }
+
+        Window("Troubleshooting", id: AppWindowID.troubleshooting) {
+            TroubleshootingView(model: model)
+        }
+        .defaultSize(width: 720, height: 620)
     }
 }

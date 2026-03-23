@@ -15,7 +15,15 @@ struct ShortcutRecorder: View {
             Button(isRecording ? "Type Shortcut…" : shortcut.displayString) {
                 isRecording ? stopRecording() : startRecording()
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
+            .help(isRecording ? "Press a key combination. Press Escape to cancel." : "Record a keyboard shortcut.")
+            .accessibilityLabel("Keyboard Shortcut")
+            .accessibilityValue(isRecording ? "Recording" : shortcut.displayString)
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(isRecording ? Color.accentColor : Color.clear, lineWidth: 2)
+            }
 
             if isRecording {
                 Text("Press a key chord. Esc cancels.")

@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import GesturesCore
+import ServiceManagement
 
 struct CaptureDiagnosticsViewState {
     var frameworkLoaded = false
@@ -28,6 +29,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var isCaptureRunning = false
     @Published private(set) var captureMessage = "Starting…"
     @Published private(set) var isDebugModeEnabled = false
+    @Published private(set) var isLaunchAtLoginEnabled = false
+    @Published private(set) var launchAtLoginErrorMessage: String?
     @Published private(set) var lastGesture: GestureEvent?
     @Published private(set) var lastGestureObservedAt: Date?
     @Published private(set) var recentDetections: [DetectedGestureEntry] = []
@@ -93,6 +96,7 @@ final class AppModel: ObservableObject {
         hasBootstrapped = true
         debugLogWriter.append("Application bootstrapping")
         refreshAccessibilityStatus()
+        refreshLaunchAtLoginStatus()
         restartCapture()
     }
 
@@ -105,6 +109,20 @@ final class AppModel: ObservableObject {
         isAccessibilityTrusted = PermissionsManager.isAccessibilityTrusted(prompt: true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { [weak self] in
             self?.refreshAccessibilityStatus()
+        }
+    }
+
+    func openAccessibilitySettings() {
+        let candidates = [
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
+        ]
+
+        for candidate in candidates {
+            guard let url = URL(string: candidate) else { continue }
+            if NSWorkspace.shared.open(url) {
+                return
+            }
         }
     }
 
@@ -144,6 +162,44 @@ final class AppModel: ObservableObject {
     func clearDebugLog() {
         debugLogWriter.clear()
         debugLogWriter.append("Debug log cleared")
+    }
+
+    func copyDebugLogPath() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(debugLogPath, forType: .string)
+    }
+
+    func refreshLaunchAtLoginStatus() {
+        guard supportsLaunchAtLogin else {
+            isLaunchAtLoginEnabled = false
+            return
+        }
+
+        isLaunchAtLoginEnabled = SMAppService.mainApp.status == .enabled
+    }
+
+    func setLaunchAtLoginEnabled(_ isEnabled: Bool) {
+        guard supportsLaunchAtLogin else {
+            launchAtLoginErrorMessage = "Launch at login is only available in the bundled app."
+            return
+        }
+
+        do {
+            if isEnabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+            launchAtLoginErrorMessage = nil
+        } catch {
+            launchAtLoginErrorMessage = error.localizedDescription
+        }
+
+        refreshLaunchAtLoginStatus()
+    }
+
+    func clearLaunchAtLoginError() {
+        launchAtLoginErrorMessage = nil
     }
 
     func setDebugModeEnabled(_ isEnabled: Bool) {
@@ -243,6 +299,31 @@ final class AppModel: ObservableObject {
         lastGestureObservedAt = nil
         recentDetections = []
         captureDiagnostics = CaptureDiagnosticsViewState()
+    }
+
+    func showAboutPanel() {
+        let shortVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let buildVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+
+        var options: [NSApplication.AboutPanelOptionKey: Any] = [
+            .applicationName: "Gestures",
+            .credits: NSAttributedString(
+                string: "Trackpad gesture shortcuts from your Mac menu bar."
+            ),
+        ]
+
+        if let shortVersion, let buildVersion {
+            options[.applicationVersion] = "\(shortVersion) (\(buildVersion))"
+        } else if let shortVersion {
+            options[.applicationVersion] = shortVersion
+        }
+
+        AppNavigation.activate()
+        NSApp.orderFrontStandardAboutPanel(options: options)
+    }
+
+    var supportsLaunchAtLogin: Bool {
+        Bundle.main.bundleURL.pathExtension == "app"
     }
 }
 

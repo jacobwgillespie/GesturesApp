@@ -6,26 +6,52 @@ struct MenuBarContentView: View {
 
     var body: some View {
         Group {
-            Button("Open Settings") {
-                NSApplication.shared.activate(ignoringOtherApps: true)
-                openWindow(id: "settings")
+            SettingsLink {
+                Label("Settings…", systemImage: "gearshape")
+            }
+
+            Button {
+                AppNavigation.activate()
+                openWindow(id: AppWindowID.troubleshooting)
+            } label: {
+                Label("Troubleshooting…", systemImage: "stethoscope")
+            }
+
+            Button {
+                model.showAboutPanel()
+            } label: {
+                Label("About Gestures", systemImage: "info.circle")
             }
 
             Divider()
 
-            Text("Capture: \(model.isCaptureRunning ? "Running" : "Stopped")")
-            Text("Accessibility: \(model.isAccessibilityTrusted ? "Granted" : "Required")")
+            Label(
+                model.isCaptureRunning ? "Capture Running" : "Capture Stopped",
+                systemImage: model.isCaptureRunning ? "wave.3.right.circle.fill" : "pause.circle"
+            )
+
+            Label(
+                model.isAccessibilityTrusted ? "Accessibility Granted" : "Accessibility Required",
+                systemImage: model.isAccessibilityTrusted ? "checkmark.circle.fill" : "lock.shield"
+            )
 
             if let lastGesture = model.lastGesture {
                 Text("Last Gesture: \(lastGesture.kind.displayName)")
             }
 
             Text(model.captureMessage)
+                .foregroundStyle(.secondary)
 
             Divider()
 
-            Button("Grant Accessibility Access") {
-                model.requestAccessibilityAccess()
+            if !model.isAccessibilityTrusted {
+                Button("Grant Accessibility Access") {
+                    model.requestAccessibilityAccess()
+                }
+
+                Button("Open Accessibility Settings") {
+                    model.openAccessibilitySettings()
+                }
             }
 
             Button("Restart Capture") {
