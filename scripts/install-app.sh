@@ -137,15 +137,22 @@ EOF
 
 printf 'APPL????' > "$PKGINFO_PATH"
 
-ASSETS_DIR="$ROOT_DIR/Sources/GesturesApp/Resources/Assets.xcassets"
-if [[ -d "$ASSETS_DIR" ]]; then
-  echo "Compiling asset catalog..."
-  xcrun actool "$ASSETS_DIR" \
-    --compile "$RESOURCES_DIR" \
-    --platform macosx \
-    --minimum-deployment-target 26.0 \
-    --app-icon AppIcon \
-    --output-partial-info-plist /dev/null 2>/dev/null || true
+ICON_SRC="$ROOT_DIR/Sources/GesturesApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png"
+if [[ -f "$ICON_SRC" ]]; then
+  echo "Building app icon..."
+  ICONSET_DIR="$ROOT_DIR/.build/AppIcon.iconset"
+  rm -rf "$ICONSET_DIR"
+  mkdir -p "$ICONSET_DIR"
+
+  # Generate all required sizes from the 1024x1024 source
+  for size in 16 32 128 256 512; do
+    sips -z $size $size "$ICON_SRC" --out "$ICONSET_DIR/icon_${size}x${size}.png" >/dev/null
+    double=$((size * 2))
+    sips -z $double $double "$ICON_SRC" --out "$ICONSET_DIR/icon_${size}x${size}@2x.png" >/dev/null
+  done
+
+  iconutil -c icns "$ICONSET_DIR" -o "$RESOURCES_DIR/AppIcon.icns"
+  rm -rf "$ICONSET_DIR"
 fi
 
 # Code sign so macOS TCC preserves accessibility permissions across reinstalls.

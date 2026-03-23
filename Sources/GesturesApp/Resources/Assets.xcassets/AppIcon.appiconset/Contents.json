@@ -1,8 +1,17 @@
 {
   "images" : [
     {
+      "filename" : "AppIcon-512.png",
       "idiom" : "mac",
       "platform" : "macos",
+      "scale" : "1x",
+      "size" : "512x512"
+    },
+    {
+      "filename" : "AppIcon-1024.png",
+      "idiom" : "mac",
+      "platform" : "macos",
+      "scale" : "2x",
       "size" : "512x512"
     }
   ],
