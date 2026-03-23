@@ -15,14 +15,11 @@ struct GesturesApp: App {
     var body: some Scene {
         MenuBarExtra("Gestures", systemImage: "hand.tap.fill") {
             MenuBarContentView(model: model)
-                .frame(width: 320)
-                .padding(14)
         }
-        .menuBarExtraStyle(.window)
 
         Window("Settings", id: "settings") {
             SettingsView(model: model, store: model.store)
-                .frame(width: 640, height: 500)
+                .frame(minWidth: 640, minHeight: 500)
         }
         .defaultSize(width: 640, height: 500)
     }
