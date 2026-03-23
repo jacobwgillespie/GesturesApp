@@ -7,6 +7,6 @@ enum AppWindowID {
 enum AppNavigation {
     @MainActor
     static func activate() {
-        NSApplication.shared.activate(ignoringOtherApps: true)
+        NSApp.activate()
     }
 }

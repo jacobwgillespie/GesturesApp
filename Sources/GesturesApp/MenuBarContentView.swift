@@ -63,9 +63,10 @@ struct MenuBarContentView: View {
                 model.restartCapture()
             }
 
-            Button("Quit") {
+            Button("Quit Gestures") {
                 NSApplication.shared.terminate(nil)
             }
+            .keyboardShortcut("q", modifiers: .command)
         }
     }
 }

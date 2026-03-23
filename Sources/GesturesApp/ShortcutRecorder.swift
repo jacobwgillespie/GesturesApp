@@ -5,19 +5,20 @@ import SwiftUI
 struct ShortcutRecorder: View {
     let shortcut: ShortcutBinding
     let onChange: (ShortcutBinding) -> Void
+    var onDelete: (() -> Void)? = nil
 
     @State private var isRecording = false
     @State private var keyMonitor: Any?
     @State private var cancelMonitor: Any?
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 4) {
+        VStack(alignment: .leading, spacing: 4) {
             Button(isRecording ? "Type Shortcut…" : shortcut.displayString) {
                 isRecording ? stopRecording() : startRecording()
             }
             .buttonStyle(.bordered)
             .controlSize(.regular)
-            .help(isRecording ? "Press a key combination. Press Escape to cancel." : "Record a keyboard shortcut.")
+            .help(isRecording ? "Press a key combination, Escape to cancel, Delete to clear." : "Click to record a keyboard shortcut.")
             .accessibilityLabel("Keyboard Shortcut")
             .accessibilityValue(isRecording ? "Recording" : shortcut.displayString)
             .overlay {
@@ -26,7 +27,7 @@ struct ShortcutRecorder: View {
             }
 
             if isRecording {
-                Text("Press a key chord. Esc cancels.")
+                Text("Press a key chord. Esc cancels, ⌫ resets to default.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -41,7 +42,13 @@ struct ShortcutRecorder: View {
         isRecording = true
 
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            if event.keyCode == 53 {
+            if event.keyCode == 53 { // Escape
+                stopRecording()
+                return nil
+            }
+
+            if event.keyCode == 51 || event.keyCode == 117 { // Delete or Forward Delete
+                onDelete?()
                 stopRecording()
                 return nil
             }

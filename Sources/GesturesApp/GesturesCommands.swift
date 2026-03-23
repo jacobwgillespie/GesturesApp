@@ -44,17 +44,6 @@ struct GesturesCommands: Commands {
             }
         }
 
-        CommandGroup(replacing: .help) {
-            Button("Gestures Help") {
-                AppNavigation.activate()
-                openWindow(id: AppWindowID.troubleshooting)
-            }
-
-            Button("Accessibility Settings") {
-                model.openAccessibilitySettings()
-            }
-        }
-
         CommandGroup(replacing: .appTermination) {
             Button("Quit Gestures") {
                 NSApplication.shared.terminate(nil)

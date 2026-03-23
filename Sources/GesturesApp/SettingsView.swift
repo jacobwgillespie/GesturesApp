@@ -17,28 +17,21 @@ struct SettingsView: View {
 
     var body: some View {
         TabView(selection: $selectedPane) {
-            generalTab
-                .tabItem {
-                    Label("General", systemImage: "gearshape")
-                }
-                .tag(SettingsPane.general)
+            Tab("General", systemImage: "gearshape", value: .general) {
+                generalTab
+            }
 
-            gesturesTab
-                .tabItem {
-                    Label("Gestures", systemImage: "hand.tap")
-                }
-                .tag(SettingsPane.gestures)
+            Tab("Gestures", systemImage: "hand.tap", value: .gestures) {
+                gesturesTab
+            }
 
-            advancedTab
-                .tabItem {
-                    Label("Advanced", systemImage: "wrench.and.screwdriver")
-                }
-                .tag(SettingsPane.advanced)
+            Tab("Advanced", systemImage: "wrench.and.screwdriver", value: .advanced) {
+                advancedTab
+            }
         }
-        .confirmationDialog(
+        .alert(
             "Reset All Gesture Defaults?",
-            isPresented: $showsResetDefaultsConfirmation,
-            titleVisibility: .visible
+            isPresented: $showsResetDefaultsConfirmation
         ) {
             Button("Reset Defaults", role: .destructive) {
                 model.resetDefaults()
@@ -48,7 +41,7 @@ struct SettingsView: View {
             Text("This restores every gesture mapping to its default action.")
         }
         .alert(
-            "Launch at Login Couldn’t Be Changed",
+            "Launch at Login Couldn't Be Changed",
             isPresented: Binding(
                 get: { model.launchAtLoginErrorMessage != nil },
                 set: { isPresented in
@@ -66,261 +59,170 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - General
+
     private var generalTab: some View {
-        SettingsPaneContainer(width: 560, height: 380) {
-            PreferenceSection("Permissions") {
-                PreferenceRow("Accessibility") {
-                    Label(
-                        model.isAccessibilityTrusted ? "Granted" : "Required",
-                        systemImage: model.isAccessibilityTrusted ? "checkmark.circle.fill" : "lock.shield"
-                    )
-                    .foregroundStyle(model.isAccessibilityTrusted ? .green : .primary)
-                }
+        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
+            GridRow(alignment: .firstTextBaseline) {
+                Text("Accessibility:")
+                    .gridColumnAlignment(.trailing)
 
-                PreferenceRow {
-                    Text("Gestures needs Accessibility permission to send keyboard shortcuts and pointer actions.")
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Label(
+                    model.isAccessibilityTrusted ? "Granted" : "Required",
+                    systemImage: model.isAccessibilityTrusted ? "checkmark.circle.fill" : "lock.shield"
+                )
+                .foregroundStyle(model.isAccessibilityTrusted ? .green : .primary)
+                .gridColumnAlignment(.leading)
+            }
 
-                PreferenceRow {
-                    HStack(spacing: 12) {
-                        Button("Open Accessibility Settings") {
-                            model.openAccessibilitySettings()
-                        }
+            GridRow {
+                Color.clear
+                    .gridCellUnsizedAxes([.horizontal, .vertical])
 
-                        if !model.isAccessibilityTrusted {
-                            Button("Grant Access") {
-                                model.requestAccessibilityAccess()
-                            }
-                        }
+                HStack(spacing: 12) {
+                    Button("Open Accessibility Settings") {
+                        model.openAccessibilitySettings()
+                    }
 
-                        Button("Check Again") {
-                            model.refreshAccessibilityStatus()
+                    if !model.isAccessibilityTrusted {
+                        Button("Grant Access") {
+                            model.requestAccessibilityAccess()
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button("Check Again") {
+                        model.refreshAccessibilityStatus()
+                    }
                 }
             }
 
             Divider()
 
-            PreferenceSection("Startup") {
-                PreferenceRow {
-                    Toggle(
-                        "Launch at login",
-                        isOn: Binding(
-                            get: { model.isLaunchAtLoginEnabled },
-                            set: { model.setLaunchAtLoginEnabled($0) }
-                        )
-                    )
-                    .disabled(!model.supportsLaunchAtLogin)
+            Toggle("Launch at login", isOn: Binding(
+                get: { model.isLaunchAtLoginEnabled },
+                set: { model.setLaunchAtLoginEnabled($0) }
+            ))
+            .disabled(!model.supportsLaunchAtLogin)
+
+            if !model.supportsLaunchAtLogin {
+                Text("This option is available in the bundled app build.")
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            HStack(spacing: 12) {
+                Button("Open Troubleshooting…") {
+                    openWindow(id: AppWindowID.troubleshooting)
                 }
 
-                if !model.supportsLaunchAtLogin {
-                    PreferenceRow {
-                        Text("This option is available in the bundled app build.")
+                Button("About Gestures") {
+                    model.showAboutPanel()
+                }
+            }
+        }
+        .padding(20)
+        .frame(width: 500)
+    }
+
+    // MARK: - Gestures
+
+    private var gesturesTab: some View {
+        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
+            ForEach(GestureKind.allCases) { gesture in
+                let configuration = store.binding(for: gesture)
+
+                Text(gesture.displayName)
+                    .font(.headline)
+                    .padding(.top, 2)
+
+                Text(gesture.detail)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Enabled", isOn: Binding(
+                    get: { configuration.isEnabled },
+                    set: { store.setEnabled($0, for: gesture) }
+                ))
+
+                GridRow(alignment: .firstTextBaseline) {
+                    Text("Action:")
+                        .gridColumnAlignment(.trailing)
+
+                    Picker("Action", selection: Binding(
+                        get: { configuration.action.kind },
+                        set: { store.updateActionKind($0, for: gesture) }
+                    )) {
+                        ForEach(GestureActionKind.allCases) { actionKind in
+                            Text(actionKind.displayName).tag(actionKind)
+                        }
+                    }
+                    .labelsHidden()
+                    .gridColumnAlignment(.leading)
+                }
+
+                switch configuration.action {
+                case let .keyboardShortcut(shortcut):
+                    GridRow(alignment: .firstTextBaseline) {
+                        Text("Shortcut:")
+                        ShortcutRecorder(shortcut: shortcut) { newShortcut in
+                            store.updateShortcut(newShortcut, for: gesture)
+                        } onDelete: {
+                            store.updateShortcut(gesture.defaultShortcutBinding, for: gesture)
+                        }
+                    }
+                case .middleClick:
+                    GridRow(alignment: .firstTextBaseline) {
+                        Text("Output:")
+                        Text("Middle mouse button")
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                Divider()
             }
 
-            Divider()
-
-            PreferenceSection("Support") {
-                PreferenceRow {
-                    HStack(spacing: 12) {
-                        Button("Open Troubleshooting…") {
-                            openWindow(id: AppWindowID.troubleshooting)
-                        }
-
-                        Button("About Gestures") {
-                            model.showAboutPanel()
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            HStack {
+                Spacer()
+                Button("Reset All Gesture Defaults…", role: .destructive) {
+                    showsResetDefaultsConfirmation = true
                 }
             }
         }
+        .padding(20)
+        .frame(width: 500)
     }
 
-    private var gesturesTab: some View {
-        SettingsPaneContainer(width: 620, height: 560) {
-            VStack(alignment: .leading, spacing: 18) {
-                ForEach(Array(GestureKind.allCases.enumerated()), id: \.element) { index, gesture in
-                let configuration = store.binding(for: gesture)
-
-                    PreferenceSection(gesture.displayName) {
-                        PreferenceRow {
-                            Text(gesture.detail)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        PreferenceRow {
-                            Toggle(
-                                "Enable this gesture",
-                                isOn: Binding(
-                                    get: { configuration.isEnabled },
-                                    set: { store.setEnabled($0, for: gesture) }
-                                )
-                            )
-                        }
-
-                        PreferenceRow("Action") {
-                            Picker(
-                                "Action",
-                                selection: Binding(
-                                    get: { configuration.action.kind },
-                                    set: { store.updateActionKind($0, for: gesture) }
-                                )
-                            ) {
-                                ForEach(GestureActionKind.allCases) { actionKind in
-                                    Text(actionKind.displayName).tag(actionKind)
-                                }
-                            }
-                            .labelsHidden()
-                            .frame(width: 220, alignment: .leading)
-                        }
-
-                        switch configuration.action {
-                        case let .keyboardShortcut(shortcut):
-                            PreferenceRow("Shortcut") {
-                                ShortcutRecorder(shortcut: shortcut) { newShortcut in
-                                    store.updateShortcut(newShortcut, for: gesture)
-                                }
-                            }
-                        case .middleClick:
-                            PreferenceRow("Output") {
-                                Text("Middle mouse button")
-                            }
-                        }
-                    }
-
-                    if index < GestureKind.allCases.count - 1 {
-                        Divider()
-                    }
-                }
-
-                Spacer(minLength: 0)
-
-                HStack {
-                    Spacer()
-                    Button("Reset All Gesture Defaults…", role: .destructive) {
-                        showsResetDefaultsConfirmation = true
-                    }
-                }
-            }
-        }
-    }
+    // MARK: - Advanced
 
     private var advancedTab: some View {
-        SettingsPaneContainer(width: 540, height: 280) {
-            PreferenceSection("Debugging") {
-                PreferenceRow {
-                    Toggle(
-                        "Enable debug mode",
-                        isOn: Binding(
-                            get: { model.isDebugModeEnabled },
-                            set: { model.setDebugModeEnabled($0) }
-                        )
-                    )
-                }
+        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
+            Toggle("Enable debug mode", isOn: Binding(
+                get: { model.isDebugModeEnabled },
+                set: { model.setDebugModeEnabled($0) }
+            ))
 
-                PreferenceRow {
-                    Text("Debug mode keeps recent gesture history and writes a diagnostic log to disk.")
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+            Text("Debug mode keeps recent gesture history and writes a diagnostic log to disk.")
+                .foregroundStyle(.secondary)
 
             Divider()
 
-            PreferenceSection("Diagnostics") {
-                PreferenceRow {
-                    HStack(spacing: 12) {
-                        Button("Open Troubleshooting…") {
-                            openWindow(id: AppWindowID.troubleshooting)
-                        }
+            HStack(spacing: 12) {
+                Button("Open Troubleshooting…") {
+                    openWindow(id: AppWindowID.troubleshooting)
+                }
 
-                        if model.isDebugModeEnabled {
-                            Button("Open Log") {
-                                model.openDebugLog()
-                            }
-
-                            Button("Reveal Log in Finder") {
-                                model.revealDebugLogInFinder()
-                            }
-                        }
+                if model.isDebugModeEnabled {
+                    Button("Open Log") {
+                        model.openDebugLog()
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button("Reveal Log in Finder") {
+                        model.revealDebugLogInFinder()
+                    }
                 }
             }
         }
-    }
-}
-
-private struct SettingsPaneContainer<Content: View>: View {
-    let width: CGFloat
-    let height: CGFloat
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            content
-        }
-        .padding(.horizontal, 28)
-        .padding(.vertical, 24)
-        .frame(width: width, height: height, alignment: .topLeading)
-    }
-}
-
-private struct PreferenceSection<Content: View>: View {
-    let title: String
-    @ViewBuilder let content: Content
-
-    init(_ title: String, @ViewBuilder content: () -> Content) {
-        self.title = title
-        self.content = content()
-    }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            Text(title)
-                .font(.headline)
-                .frame(width: 140, alignment: .trailing)
-
-            VStack(alignment: .leading, spacing: 12) {
-                content
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct PreferenceRow<Content: View>: View {
-    let label: String?
-    @ViewBuilder let content: Content
-
-    init(_ label: String? = nil, @ViewBuilder content: () -> Content) {
-        self.label = label
-        self.content = content()
-    }
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 16) {
-            if let label {
-                Text(label)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 140, alignment: .trailing)
-            } else {
-                Spacer()
-                    .frame(width: 140)
-            }
-
-            content
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
+        .padding(20)
+        .frame(width: 500)
     }
 }

@@ -29,5 +29,6 @@ struct GesturesApp: App {
             TroubleshootingView(model: model)
         }
         .defaultSize(width: 720, height: 620)
+        .windowResizability(.contentMinSize)
     }
 }

@@ -26,6 +26,7 @@ Environment overrides:
   BUNDLE_ID             Bundle identifier (default: ${BUNDLE_ID})
   INSTALL_DIR           Install destination
   CONFIGURATION         debug or release
+  SIGNING_IDENTITY      Code signing identity (default: auto-detect, falls back to ad-hoc)
 EOF
 }
 
@@ -120,8 +121,10 @@ cat > "$INFO_PLIST" <<EOF
   <string>${BUILD_VERSION}</string>
   <key>LSApplicationCategoryType</key>
   <string>public.app-category.utilities</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>LSMinimumSystemVersion</key>
-  <string>14.0</string>
+  <string>26.0</string>
   <key>LSUIElement</key>
   <true/>
   <key>NSHighResolutionCapable</key>
@@ -133,6 +136,37 @@ cat > "$INFO_PLIST" <<EOF
 EOF
 
 printf 'APPL????' > "$PKGINFO_PATH"
+
+ASSETS_DIR="$ROOT_DIR/Sources/GesturesApp/Resources/Assets.xcassets"
+if [[ -d "$ASSETS_DIR" ]]; then
+  echo "Compiling asset catalog..."
+  xcrun actool "$ASSETS_DIR" \
+    --compile "$RESOURCES_DIR" \
+    --platform macosx \
+    --minimum-deployment-target 26.0 \
+    --app-icon AppIcon \
+    --output-partial-info-plist /dev/null 2>/dev/null || true
+fi
+
+# Code sign so macOS TCC preserves accessibility permissions across reinstalls.
+# A stable designated requirement (based on bundle ID) prevents macOS from treating
+# each rebuild as a different app and revoking permissions.
+echo "Code signing app bundle..."
+SIGNING_IDENTITY="${SIGNING_IDENTITY:-}"
+if [[ -z "$SIGNING_IDENTITY" ]]; then
+  # Check for any available signing identity
+  SIGNING_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \
+    | grep -oE '"[^"]+"' | head -1 | tr -d '"' || true)"
+fi
+if [[ -n "$SIGNING_IDENTITY" ]]; then
+  codesign --force --sign "$SIGNING_IDENTITY" --deep "$APP_DIR"
+else
+  # Ad-hoc sign with an explicit designated requirement pinned to the bundle ID,
+  # so TCC matches on identifier rather than the per-build cdhash.
+  codesign --force --sign - \
+    -r "=designated => identifier \"$BUNDLE_ID\"" \
+    --deep "$APP_DIR"
+fi
 
 mkdir -p "$INSTALL_DIR"
 echo "Installing to $INSTALLED_APP_DIR..."

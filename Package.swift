@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "gestures",
     platforms: [
-        .macOS(.v14),
+        .macOS(.v26),
     ],
     products: [
         .library(name: "GesturesCore", targets: ["GesturesCore"]),
@@ -21,6 +21,9 @@ let package = Package(
         .executableTarget(
             name: "GesturesApp",
             dependencies: ["GesturesCore"],
+            resources: [
+                .process("Resources"),
+            ],
             swiftSettings: [
                 .unsafeFlags(["-parse-as-library"]),
             ],

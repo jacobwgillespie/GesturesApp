@@ -16,10 +16,9 @@ struct TroubleshootingView: View {
             .padding(20)
         }
         .frame(minWidth: 680, minHeight: 560)
-        .confirmationDialog(
+        .alert(
             "Clear Debug Log?",
-            isPresented: $showsClearLogConfirmation,
-            titleVisibility: .visible
+            isPresented: $showsClearLogConfirmation
         ) {
             Button("Clear Log", role: .destructive) {
                 model.clearDebugLog()
