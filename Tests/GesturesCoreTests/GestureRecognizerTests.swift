@@ -174,6 +174,44 @@ final class GestureRecognizerTests: XCTestCase {
         XCTAssertEqual(secondEvent?.kind, .twoFingerTipTapRight)
     }
 
+    func testRejectsTipTapWhenTouchesAreTooFarApart() {
+        let recognizer = GestureRecognizer()
+
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.00, contacts: [
+            contact(id: 1, x: 0.10, y: 0.48),
+        ])))
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.08, contacts: [
+            contact(id: 1, x: 0.10, y: 0.48),
+            contact(id: 2, x: 0.62, y: 0.48),
+        ])))
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.14, contacts: [
+            contact(id: 1, x: 0.10, y: 0.48),
+        ])))
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.22, contacts: [])))
+    }
+
+    func testRejectsFallbackTipTapWhenTouchesAreTooFarApart() {
+        let recognizer = GestureRecognizer()
+
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.00, contacts: [
+            contact(id: 1, x: 0.15, y: 0.48),
+        ])))
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.08, contacts: [
+            contact(id: 1, x: 0.15, y: 0.48),
+        ])))
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.14, contacts: [
+            contact(id: 1, x: 0.15, y: 0.48),
+            contact(id: 2, x: 0.70, y: 0.48),
+        ])))
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.18, contacts: [
+            contact(id: 1, x: 0.15, y: 0.48),
+            contact(id: 2, x: 0.70, y: 0.48),
+        ])))
+
+        let event = recognizer.process(frame: frame(time: 0.20, contacts: []))
+        XCTAssertNil(event)
+    }
+
     func testTipTapSuppressesRepeatWithinSameAnchorCooldown() {
         let recognizer = GestureRecognizer()
 

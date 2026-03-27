@@ -14,6 +14,7 @@ public final class GestureRecognizer {
         static let tipMaxTravel = 0.06
         static let anchorMaxTravel = 0.05
         static let tipSideSeparation = 0.075
+        static let tipMaxSeparation = 0.30
         static let emissionDebounce = 0.15
         static let repeatedTipTapCooldown = 0.15
     }
@@ -152,6 +153,9 @@ private struct GestureSession {
         guard tip.firstTimestamp <= anchor.lastTimestamp else { return nil }
 
         let anchorPosition = anchor.position(closestTo: tip.firstTimestamp)
+        guard anchorPosition.distance(to: tip.firstPosition) <= GestureRecognizer.Thresholds.tipMaxSeparation else {
+            return nil
+        }
         let deltaX = tip.firstPosition.x - anchorPosition.x
         guard abs(deltaX) >= GestureRecognizer.Thresholds.tipSideSeparation else { return nil }
 
@@ -247,6 +251,10 @@ private struct GestureSession {
         }
 
         let deltaX = candidate.tipTrace.firstPosition.x - candidate.anchorReferencePosition.x
+        guard candidate.anchorReferencePosition.distance(to: candidate.tipTrace.firstPosition)
+            <= GestureRecognizer.Thresholds.tipMaxSeparation else {
+            return nil
+        }
         guard abs(deltaX) >= GestureRecognizer.Thresholds.tipSideSeparation else { return nil }
 
         let kind: GestureKind = deltaX < 0 ? .twoFingerTipTapLeft : .twoFingerTipTapRight
