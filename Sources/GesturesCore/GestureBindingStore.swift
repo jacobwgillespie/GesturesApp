@@ -55,6 +55,12 @@ public final class GestureBindingStore: ObservableObject {
         updateConfiguration(configuration, for: gesture)
     }
 
+    public func setHapticsEnabled(_ isEnabled: Bool, for gesture: GestureKind) {
+        var configuration = binding(for: gesture)
+        configuration.isHapticsEnabled = isEnabled
+        updateConfiguration(configuration, for: gesture)
+    }
+
     public func resetToDefaults() {
         bindings = Self.defaultBindings
         persist()

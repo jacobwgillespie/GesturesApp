@@ -144,6 +144,11 @@ struct SettingsView: View {
                     set: { store.setEnabled($0, for: gesture) }
                 ))
 
+                Toggle("Haptic feedback", isOn: Binding(
+                    get: { configuration.isHapticsEnabled },
+                    set: { store.setHapticsEnabled($0, for: gesture) }
+                ))
+
                 GridRow(alignment: .firstTextBaseline) {
                     Text("Action:")
                         .gridColumnAlignment(.trailing)

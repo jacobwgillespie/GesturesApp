@@ -43,13 +43,21 @@ public final class GestureRecognizer {
             session = GestureSession(startTimestamp: frame.timestamp)
         }
 
-        return emitIfNotDebounced(session?.append(timestamp: frame.timestamp, contacts: activeContacts))
+        let shouldAttemptTerminalClassification = activeContacts.contains { $0.phase == .breakTouch }
+        return emitIfNotDebounced(
+            session?.append(
+                timestamp: frame.timestamp,
+                contacts: activeContacts,
+                shouldAttemptTerminalClassification: shouldAttemptTerminalClassification
+            )
+        )
     }
 
     private func emitIfNotDebounced(_ event: GestureEvent?) -> GestureEvent? {
         guard let event else { return nil }
         if let lastEmission,
            lastEmission.kind == event.kind,
+           lastEmission.phase == event.phase,
            (event.timestamp - lastEmission.timestamp) < Thresholds.emissionDebounce {
             return nil
         }
@@ -66,6 +74,7 @@ private struct GestureSession {
     private(set) var snapshots: [SessionSnapshot] = []
     private(set) var traces: [Int: ContactTrace] = [:]
     private(set) var didEmitLiveTipTap = false
+    private(set) var didArmThreeFingerSwipeDown = false
     private var tipTapCandidate: TipTapCandidate?
     private var lastLiveTipTap: LiveTipTapEmission?
 
@@ -74,7 +83,11 @@ private struct GestureSession {
         lastTimestamp = startTimestamp
     }
 
-    mutating func append(timestamp: TimeInterval, contacts: [TouchContact]) -> GestureEvent? {
+    mutating func append(
+        timestamp: TimeInterval,
+        contacts: [TouchContact],
+        shouldAttemptTerminalClassification: Bool = false
+    ) -> GestureEvent? {
         lastTimestamp = timestamp
         maxActiveCount = max(maxActiveCount, contacts.count)
         let sortedContacts = contacts.sorted { $0.identifier < $1.identifier }
@@ -92,6 +105,14 @@ private struct GestureSession {
             return event
         }
 
+        if let event = classifyReadinessIfNeeded() {
+            return event
+        }
+
+        if shouldAttemptTerminalClassification, !didEmitLiveTipTap {
+            return classify()
+        }
+
         return nil
     }
 
@@ -100,6 +121,20 @@ private struct GestureSession {
         if let event = classifyThreeFingerSwipeDown() { return event }
         if let event = classifyTipTap() { return event }
         return nil
+    }
+
+    private mutating func classifyReadinessIfNeeded() -> GestureEvent? {
+        guard !didArmThreeFingerSwipeDown else { return nil }
+        guard maxActiveCount == 3, traces.count == 3 else { return nil }
+        guard let lastSnapshot = snapshots.last, lastSnapshot.contacts.count == 3 else { return nil }
+
+        guard classifyThreeFingerSwipeDown() != nil else { return nil }
+        didArmThreeFingerSwipeDown = true
+        return GestureEvent(
+            kind: .threeFingerSwipeDown,
+            timestamp: lastTimestamp,
+            phase: .armed
+        )
     }
 
     private func classifyThreeFingerTap() -> GestureEvent? {
@@ -128,7 +163,11 @@ private struct GestureSession {
         let dy = last.centroid.y - first.centroid.y
         guard dy <= -GestureRecognizer.Thresholds.swipeMinVerticalTravel else { return nil }
         guard abs(dx) <= GestureRecognizer.Thresholds.swipeMaxHorizontalTravel else { return nil }
-        return GestureEvent(kind: .threeFingerSwipeDown, timestamp: lastTimestamp)
+        return GestureEvent(
+            kind: .threeFingerSwipeDown,
+            timestamp: lastTimestamp,
+            shouldPlayHaptic: !didArmThreeFingerSwipeDown
+        )
     }
 
     private func classifyTipTap() -> GestureEvent? {

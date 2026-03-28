@@ -20,6 +20,29 @@ final class GestureRecognizerTests: XCTestCase {
         XCTAssertEqual(event?.kind, .threeFingerTap)
     }
 
+    func testRecognizesThreeFingerTapOnBreakTouchFrame() {
+        let recognizer = GestureRecognizer()
+
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.00, contacts: [
+            contact(id: 1, x: 0.30, y: 0.62),
+            contact(id: 2, x: 0.50, y: 0.64),
+            contact(id: 3, x: 0.70, y: 0.61),
+        ])))
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.08, contacts: [
+            contact(id: 1, x: 0.31, y: 0.62),
+            contact(id: 2, x: 0.50, y: 0.63),
+            contact(id: 3, x: 0.69, y: 0.60),
+        ])))
+
+        let event = recognizer.process(frame: frame(time: 0.12, contacts: [
+            contact(id: 1, x: 0.31, y: 0.62, phase: .breakTouch),
+            contact(id: 2, x: 0.50, y: 0.63, phase: .breakTouch),
+            contact(id: 3, x: 0.69, y: 0.60, phase: .breakTouch),
+        ]))
+        XCTAssertEqual(event?.kind, .threeFingerTap)
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.16, contacts: [])))
+    }
+
     func testRecognizesThreeFingerSwipeDown() {
         let recognizer = GestureRecognizer()
 
@@ -33,14 +56,80 @@ final class GestureRecognizerTests: XCTestCase {
             contact(id: 2, x: 0.50, y: 0.64),
             contact(id: 3, x: 0.68, y: 0.62),
         ])))
-        XCTAssertNil(recognizer.process(frame: frame(time: 0.24, contacts: [
+        let armedEvent = recognizer.process(frame: frame(time: 0.24, contacts: [
             contact(id: 1, x: 0.34, y: 0.47),
             contact(id: 2, x: 0.50, y: 0.49),
             contact(id: 3, x: 0.67, y: 0.46),
-        ])))
+        ]))
+        XCTAssertEqual(armedEvent?.kind, .threeFingerSwipeDown)
+        XCTAssertEqual(armedEvent?.phase, .armed)
+        XCTAssertTrue(armedEvent?.shouldPlayHaptic == true)
 
         let event = recognizer.process(frame: frame(time: 0.28, contacts: []))
         XCTAssertEqual(event?.kind, .threeFingerSwipeDown)
+        XCTAssertEqual(event?.phase, .recognized)
+        XCTAssertFalse(event?.shouldPlayHaptic == true)
+    }
+
+    func testRecognizesThreeFingerSwipeDownOnBreakTouchFrame() {
+        let recognizer = GestureRecognizer()
+
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.00, contacts: [
+            contact(id: 1, x: 0.32, y: 0.78),
+            contact(id: 2, x: 0.49, y: 0.80),
+            contact(id: 3, x: 0.67, y: 0.77),
+        ])))
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.12, contacts: [
+            contact(id: 1, x: 0.33, y: 0.63),
+            contact(id: 2, x: 0.50, y: 0.64),
+            contact(id: 3, x: 0.68, y: 0.62),
+        ])))
+
+        let armedEvent = recognizer.process(frame: frame(time: 0.24, contacts: [
+            contact(id: 1, x: 0.34, y: 0.47, phase: .breakTouch),
+            contact(id: 2, x: 0.50, y: 0.49, phase: .breakTouch),
+            contact(id: 3, x: 0.67, y: 0.46, phase: .breakTouch),
+        ]))
+        XCTAssertEqual(armedEvent?.kind, .threeFingerSwipeDown)
+        XCTAssertEqual(armedEvent?.phase, .armed)
+        XCTAssertTrue(armedEvent?.shouldPlayHaptic == true)
+
+        let event = recognizer.process(frame: frame(time: 0.28, contacts: []))
+        XCTAssertEqual(event?.kind, .threeFingerSwipeDown)
+        XCTAssertEqual(event?.phase, .recognized)
+        XCTAssertFalse(event?.shouldPlayHaptic == true)
+    }
+
+    func testThreeFingerSwipeDownArmsOnlyOnceBeforeRecognition() {
+        let recognizer = GestureRecognizer()
+
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.00, contacts: [
+            contact(id: 1, x: 0.32, y: 0.78),
+            contact(id: 2, x: 0.49, y: 0.80),
+            contact(id: 3, x: 0.67, y: 0.77),
+        ])))
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.12, contacts: [
+            contact(id: 1, x: 0.33, y: 0.63),
+            contact(id: 2, x: 0.50, y: 0.64),
+            contact(id: 3, x: 0.68, y: 0.62),
+        ])))
+
+        let firstArmedEvent = recognizer.process(frame: frame(time: 0.24, contacts: [
+            contact(id: 1, x: 0.34, y: 0.47),
+            contact(id: 2, x: 0.50, y: 0.49),
+            contact(id: 3, x: 0.67, y: 0.46),
+        ]))
+        XCTAssertEqual(firstArmedEvent?.phase, .armed)
+
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.30, contacts: [
+            contact(id: 1, x: 0.35, y: 0.40),
+            contact(id: 2, x: 0.50, y: 0.42),
+            contact(id: 3, x: 0.67, y: 0.39),
+        ])))
+
+        let event = recognizer.process(frame: frame(time: 0.36, contacts: []))
+        XCTAssertEqual(event?.kind, .threeFingerSwipeDown)
+        XCTAssertEqual(event?.phase, .recognized)
     }
 
     func testDistinguishesTipTapLeftAndRight() {
@@ -121,6 +210,28 @@ final class GestureRecognizerTests: XCTestCase {
         ]))
         XCTAssertEqual(secondEvent?.kind, .twoFingerTipTapRight)
         XCTAssertNil(recognizer.process(frame: frame(time: 0.48, contacts: [])))
+    }
+
+    func testTipTapDoesNotRetriggerWhenAnchorFingerLifts() {
+        let recognizer = GestureRecognizer()
+
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.00, contacts: [
+            contact(id: 1, x: 0.40, y: 0.48),
+        ])))
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.08, contacts: [
+            contact(id: 1, x: 0.40, y: 0.48),
+            contact(id: 2, x: 0.55, y: 0.48),
+        ])))
+
+        let tipTapEvent = recognizer.process(frame: frame(time: 0.14, contacts: [
+            contact(id: 1, x: 0.40, y: 0.48),
+        ]))
+        XCTAssertEqual(tipTapEvent?.kind, .twoFingerTipTapRight)
+
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.20, contacts: [
+            contact(id: 1, x: 0.40, y: 0.48, phase: .breakTouch),
+        ])))
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.24, contacts: [])))
     }
 
     func testTipTapDebouncesRapidDuplicateEmission() {

@@ -20,6 +20,39 @@ struct DetectedGestureEntry: Identifiable {
     let detail: String
 }
 
+private enum HapticFeedbackKind {
+    case trigger
+    case ready
+
+    var debugName: String {
+        switch self {
+        case .trigger:
+            "trigger"
+        case .ready:
+            "ready"
+        }
+    }
+}
+
+protocol GestureHapticPerforming {
+    func performTrigger()
+    func performReady()
+}
+
+struct SystemGestureHapticPerformer: GestureHapticPerforming {
+    func performTrigger() {
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+    }
+
+    func performReady() {
+        let performer = NSHapticFeedbackManager.defaultPerformer
+        performer.perform(.generic, performanceTime: .now)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.045) {
+            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        }
+    }
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     static let shared = AppModel()
@@ -40,6 +73,7 @@ final class AppModel: ObservableObject {
     let store = GestureBindingStore()
 
     private let dispatcher: ShortcutDispatching
+    private let hapticPerformer: GestureHapticPerforming
     private let service: MultitouchService
     private let debugLogWriter: DebugLogWriter
     private let userDefaults: UserDefaults
@@ -47,6 +81,7 @@ final class AppModel: ObservableObject {
 
     private init(
         dispatcher: ShortcutDispatching? = nil,
+        hapticPerformer: GestureHapticPerforming = SystemGestureHapticPerformer(),
         service: MultitouchService = MultitouchService(),
         debugLogWriter: DebugLogWriter = .shared,
         userDefaults: UserDefaults = .standard
@@ -59,6 +94,7 @@ final class AppModel: ObservableObject {
         self.dispatcher = dispatcher ?? ShortcutDispatcher(logger: { message in
             debugLogWriter.append(message)
         })
+        self.hapticPerformer = hapticPerformer
         self.service = service
         debugLogPath = debugLogWriter.logFileURL.path
 
@@ -202,6 +238,16 @@ final class AppModel: ObservableObject {
         launchAtLoginErrorMessage = nil
     }
 
+    func testTriggerHaptic() {
+        playHaptic(.trigger, source: "manual test")
+        captureMessage = "Played trigger haptic test."
+    }
+
+    func testReadyHaptic() {
+        playHaptic(.ready, source: "manual test")
+        captureMessage = "Played ready haptic test."
+    }
+
     func setDebugModeEnabled(_ isEnabled: Bool) {
         guard isDebugModeEnabled != isEnabled else { return }
         isDebugModeEnabled = isEnabled
@@ -228,6 +274,20 @@ final class AppModel: ObservableObject {
             lastGestureObservedAt = Date()
         }
         let configuration = store.binding(for: event.kind)
+
+        if event.phase == .armed {
+            guard configuration.isEnabled else { return }
+            if configuration.isHapticsEnabled && event.shouldPlayHaptic {
+                playHaptic(.ready, source: "\(event.kind.displayName) armed")
+            }
+            captureMessage = "\(event.kind.displayName) is ready; lift to trigger."
+            if isDebugModeEnabled {
+                recordDetection(kind: event.kind, detail: "Ready; lift to trigger")
+                debugLogWriter.append("Gesture armed: \(event.kind.displayName)")
+            }
+            return
+        }
+
         guard configuration.isEnabled else {
             captureMessage = "Detected \(event.kind.displayName), but its mapping is disabled."
             if isDebugModeEnabled {
@@ -240,10 +300,14 @@ final class AppModel: ObservableObject {
         let dispatched = dispatcher.dispatch(configuration.action)
         let actionDescription = configuration.action.displayString
         if dispatched {
+            if configuration.isHapticsEnabled && event.shouldPlayHaptic {
+                playHaptic(.trigger, source: "\(event.kind.displayName) recognized")
+            }
             captureMessage = "Triggered \(event.kind.displayName) → \(actionDescription)"
             if isDebugModeEnabled {
                 recordDetection(kind: event.kind, detail: "Sent \(actionDescription)")
-                debugLogWriter.append("Gesture detected: \(event.kind.displayName) | dispatched \(actionDescription)")
+                let hapticsSuffix = configuration.isHapticsEnabled && event.shouldPlayHaptic ? " | haptics played" : ""
+                debugLogWriter.append("Gesture detected: \(event.kind.displayName) | dispatched \(actionDescription)\(hapticsSuffix)")
             }
         } else {
             refreshAccessibilityStatus()
@@ -292,6 +356,19 @@ final class AppModel: ObservableObject {
             status=\"\(diagnostics.statusSummary)\"
             """
         )
+    }
+
+    private func playHaptic(_ kind: HapticFeedbackKind, source: String) {
+        switch kind {
+        case .trigger:
+            hapticPerformer.performTrigger()
+        case .ready:
+            hapticPerformer.performReady()
+        }
+
+        if isDebugModeEnabled {
+            debugLogWriter.append("Haptic request: kind=\(kind.debugName) source=\(source)")
+        }
     }
 
     private func clearDebugState() {

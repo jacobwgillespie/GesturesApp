@@ -109,20 +109,24 @@ public enum GestureAction: Codable, Hashable, Sendable {
 
 public struct GestureBindingConfiguration: Codable, Hashable, Sendable {
     public var isEnabled: Bool
+    public var isHapticsEnabled: Bool
     public var action: GestureAction
 
-    public init(isEnabled: Bool, action: GestureAction) {
+    public init(isEnabled: Bool, isHapticsEnabled: Bool = false, action: GestureAction) {
         self.isEnabled = isEnabled
+        self.isHapticsEnabled = isHapticsEnabled
         self.action = action
     }
 
-    public init(isEnabled: Bool, shortcut: ShortcutBinding) {
+    public init(isEnabled: Bool, isHapticsEnabled: Bool = false, shortcut: ShortcutBinding) {
         self.isEnabled = isEnabled
+        self.isHapticsEnabled = isHapticsEnabled
         action = .keyboardShortcut(shortcut)
     }
 
     private enum CodingKeys: String, CodingKey {
         case isEnabled
+        case isHapticsEnabled
         case action
         case shortcut
     }
@@ -130,6 +134,7 @@ public struct GestureBindingConfiguration: Codable, Hashable, Sendable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        isHapticsEnabled = try container.decodeIfPresent(Bool.self, forKey: .isHapticsEnabled) ?? false
         if let action = try container.decodeIfPresent(GestureAction.self, forKey: .action) {
             self.action = action
         } else {
@@ -141,6 +146,7 @@ public struct GestureBindingConfiguration: Codable, Hashable, Sendable {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(isEnabled, forKey: .isEnabled)
+        try container.encode(isHapticsEnabled, forKey: .isHapticsEnabled)
         try container.encode(action, forKey: .action)
     }
 }

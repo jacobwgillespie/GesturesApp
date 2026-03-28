@@ -32,6 +32,18 @@ final class GestureBindingStoreTests: XCTestCase {
         XCTAssertFalse(reloadedStore.binding(for: .threeFingerSwipeDown).isEnabled)
     }
 
+    func testHapticsTogglePersists() throws {
+        let suiteName = "GestureBindingStoreTests.haptics.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let initialStore = GestureBindingStore(userDefaults: defaults, storageKey: "bindings")
+        initialStore.setHapticsEnabled(true, for: .twoFingerTipTapLeft)
+
+        let reloadedStore = GestureBindingStore(userDefaults: defaults, storageKey: "bindings")
+        XCTAssertTrue(reloadedStore.binding(for: .twoFingerTipTapLeft).isHapticsEnabled)
+    }
+
     func testResetRestoresDefaults() throws {
         let suiteName = "GestureBindingStoreTests.reset.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -78,5 +90,6 @@ final class GestureBindingStoreTests: XCTestCase {
 
         let migratedStore = GestureBindingStore(userDefaults: defaults, storageKey: "bindings")
         XCTAssertEqual(migratedStore.binding(for: .threeFingerTap).action, .keyboardShortcut(legacyShortcut))
+        XCTAssertFalse(migratedStore.binding(for: .threeFingerTap).isHapticsEnabled)
     }
 }

@@ -10,6 +10,7 @@ struct TroubleshootingView: View {
             VStack(alignment: .leading, spacing: 20) {
                 statusSection
                 diagnosticsSection
+                hapticsSection
                 detectedGesturesSection
                 debugLogSection
             }
@@ -118,6 +119,32 @@ struct TroubleshootingView: View {
                 systemImage: "ladybug.slash",
                 description: Text("Enable debug mode in Settings to capture gesture history and low-level diagnostics.")
             )
+        }
+    }
+
+    @ViewBuilder
+    private var hapticsSection: some View {
+        GroupBox("Haptics") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Use these buttons to verify whether Gestures can request trackpad haptics independently of gesture detection.")
+                    .foregroundStyle(.secondary)
+
+                HStack {
+                    Button("Test Trigger Haptic") {
+                        model.testTriggerHaptic()
+                    }
+
+                    Button("Test Ready Haptic") {
+                        model.testReadyHaptic()
+                    }
+                }
+
+                if model.isDebugModeEnabled {
+                    Text("When debug mode is enabled, each attempt is also written to the debug log.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
