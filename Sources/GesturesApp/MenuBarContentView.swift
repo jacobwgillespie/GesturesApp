@@ -11,22 +11,9 @@ struct MenuBarContentView: View {
                 AppNavigation.activate()
                 openSettings()
             } label: {
-                Label("Settings…", systemImage: "gearshape")
+                Label("Settings\u{2026}", systemImage: "gearshape")
             }
             .keyboardShortcut(",", modifiers: .command)
-
-            Button {
-                AppNavigation.activate()
-                openWindow(id: AppWindowID.troubleshooting)
-            } label: {
-                Label("Troubleshooting…", systemImage: "stethoscope")
-            }
-
-            Button {
-                model.showAboutPanel()
-            } label: {
-                Label("About Gestures", systemImage: "info.circle")
-            }
 
             Divider()
 
@@ -39,10 +26,6 @@ struct MenuBarContentView: View {
                 model.isAccessibilityTrusted ? "Accessibility Granted" : "Accessibility Required",
                 systemImage: model.isAccessibilityTrusted ? "checkmark.circle.fill" : "lock.shield"
             )
-
-            if let lastGesture = model.lastGesture {
-                Text("Last Gesture: \(lastGesture.kind.displayName)")
-            }
 
             Text(model.captureMessage)
                 .foregroundStyle(.secondary)
@@ -61,6 +44,21 @@ struct MenuBarContentView: View {
 
             Button("Restart Capture") {
                 model.restartCapture()
+            }
+
+            Divider()
+
+            Button {
+                AppNavigation.activate()
+                openWindow(id: AppWindowID.troubleshooting)
+            } label: {
+                Label("Troubleshooting\u{2026}", systemImage: "stethoscope")
+            }
+
+            Button {
+                model.showAboutPanel()
+            } label: {
+                Label("About Gestures", systemImage: "info.circle")
             }
 
             Button("Quit Gestures") {

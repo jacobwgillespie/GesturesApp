@@ -14,6 +14,7 @@ struct SettingsView: View {
 
     @State private var selectedPane: SettingsPane = .general
     @State private var showsResetDefaultsConfirmation = false
+    @State private var tabContentHeight: CGFloat = 200
 
     var body: some View {
         TabView(selection: $selectedPane) {
@@ -29,6 +30,12 @@ struct SettingsView: View {
                 advancedTab
             }
         }
+        .frame(height: tabContentHeight)
+        .onAppear {
+            AppNavigation.activate()
+            measureAndResize(animated: false)
+        }
+        .onChange(of: selectedPane) { _, _ in measureAndResize(animated: true) }
         .alert(
             "Reset All Gesture Defaults?",
             isPresented: $showsResetDefaultsConfirmation
@@ -59,28 +66,44 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Tab sizing
+
+    private func measureAndResize(animated: Bool) {
+        let content: AnyView
+        switch selectedPane {
+        case .general: content = AnyView(generalTab)
+        case .gestures: content = AnyView(gesturesTab)
+        case .advanced: content = AnyView(advancedTab)
+        }
+
+        let sizing = NSHostingController(rootView: content)
+        sizing.sizingOptions = .intrinsicContentSize
+        let ideal = sizing.view.fittingSize
+
+        if animated {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                tabContentHeight = ideal.height
+            }
+        } else {
+            tabContentHeight = ideal.height
+        }
+    }
+
     // MARK: - General
 
     private var generalTab: some View {
-        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
-            GridRow(alignment: .firstTextBaseline) {
-                Text("Accessibility:")
-                    .gridColumnAlignment(.trailing)
+        Form {
+            Section {
+                LabeledContent("Accessibility") {
+                    Label(
+                        model.isAccessibilityTrusted ? "Granted" : "Required",
+                        systemImage: model.isAccessibilityTrusted ? "checkmark.circle.fill" : "lock.shield"
+                    )
+                    .foregroundStyle(model.isAccessibilityTrusted ? .green : .primary)
+                }
 
-                Label(
-                    model.isAccessibilityTrusted ? "Granted" : "Required",
-                    systemImage: model.isAccessibilityTrusted ? "checkmark.circle.fill" : "lock.shield"
-                )
-                .foregroundStyle(model.isAccessibilityTrusted ? .green : .primary)
-                .gridColumnAlignment(.leading)
-            }
-
-            GridRow {
-                Color.clear
-                    .gridCellUnsizedAxes([.horizontal, .vertical])
-
-                HStack(spacing: 12) {
-                    Button("Open Accessibility Settings") {
+                HStack(spacing: 8) {
+                    Button("Open Settings\u{2026}") {
                         model.openAccessibilitySettings()
                     }
 
@@ -94,130 +117,112 @@ struct SettingsView: View {
                         model.refreshAccessibilityStatus()
                     }
                 }
+            } header: {
+                Text("Accessibility")
             }
 
-            Divider()
-
-            Toggle("Launch at login", isOn: Binding(
-                get: { model.isLaunchAtLoginEnabled },
-                set: { model.setLaunchAtLoginEnabled($0) }
-            ))
-            .disabled(!model.supportsLaunchAtLogin)
-
-            if !model.supportsLaunchAtLogin {
-                Text("This option is available in the bundled app build.")
-                    .foregroundStyle(.secondary)
-            }
-
-            Divider()
-
-            HStack(spacing: 12) {
-                Button("Open Troubleshooting…") {
-                    openWindow(id: AppWindowID.troubleshooting)
-                }
-
-                Button("About Gestures") {
-                    model.showAboutPanel()
+            Section {
+                Toggle("Launch at login", isOn: Binding(
+                    get: { model.isLaunchAtLoginEnabled },
+                    set: { model.setLaunchAtLoginEnabled($0) }
+                ))
+                .disabled(!model.supportsLaunchAtLogin)
+            } footer: {
+                if !model.supportsLaunchAtLogin {
+                    Text("Available in the bundled app build.")
                 }
             }
         }
-        .padding(20)
+        .formStyle(.grouped)
+        .scrollDisabled(true)
         .frame(width: 500)
     }
 
     // MARK: - Gestures
 
     private var gesturesTab: some View {
-        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
-            ForEach(GestureKind.allCases) { gesture in
-                let configuration = store.binding(for: gesture)
+        VStack(spacing: 0) {
+            Form {
+                ForEach(GestureKind.allCases) { gesture in
+                    let configuration = store.binding(for: gesture)
 
-                Text(gesture.displayName)
-                    .font(.headline)
-                    .padding(.top, 2)
+                    Section {
+                        Toggle("Enabled", isOn: Binding(
+                            get: { configuration.isEnabled },
+                            set: { store.setEnabled($0, for: gesture) }
+                        ))
 
-                Text(gesture.detail)
-                    .foregroundStyle(.secondary)
+                        Toggle("Haptic feedback", isOn: Binding(
+                            get: { configuration.isHapticsEnabled },
+                            set: { store.setHapticsEnabled($0, for: gesture) }
+                        ))
 
-                Toggle("Enabled", isOn: Binding(
-                    get: { configuration.isEnabled },
-                    set: { store.setEnabled($0, for: gesture) }
-                ))
-
-                Toggle("Haptic feedback", isOn: Binding(
-                    get: { configuration.isHapticsEnabled },
-                    set: { store.setHapticsEnabled($0, for: gesture) }
-                ))
-
-                GridRow(alignment: .firstTextBaseline) {
-                    Text("Action:")
-                        .gridColumnAlignment(.trailing)
-
-                    Picker("Action", selection: Binding(
-                        get: { configuration.action.kind },
-                        set: { store.updateActionKind($0, for: gesture) }
-                    )) {
-                        ForEach(GestureActionKind.allCases) { actionKind in
-                            Text(actionKind.displayName).tag(actionKind)
+                        Picker("Action", selection: Binding(
+                            get: { configuration.action.kind },
+                            set: { store.updateActionKind($0, for: gesture) }
+                        )) {
+                            ForEach(GestureActionKind.allCases) { actionKind in
+                                Text(actionKind.displayName).tag(actionKind)
+                            }
                         }
-                    }
-                    .labelsHidden()
-                    .gridColumnAlignment(.leading)
-                }
 
-                switch configuration.action {
-                case let .keyboardShortcut(shortcut):
-                    GridRow(alignment: .firstTextBaseline) {
-                        Text("Shortcut:")
-                        ShortcutRecorder(shortcut: shortcut) { newShortcut in
-                            store.updateShortcut(newShortcut, for: gesture)
-                        } onDelete: {
-                            store.updateShortcut(gesture.defaultShortcutBinding, for: gesture)
+                        switch configuration.action {
+                        case let .keyboardShortcut(shortcut):
+                            LabeledContent("Shortcut") {
+                                ShortcutRecorder(shortcut: shortcut) { newShortcut in
+                                    store.updateShortcut(newShortcut, for: gesture)
+                                } onDelete: {
+                                    store.updateShortcut(gesture.defaultShortcutBinding, for: gesture)
+                                }
+                            }
+                        case .middleClick:
+                            LabeledContent("Output") {
+                                Text("Middle mouse button")
+                                    .foregroundStyle(.secondary)
+                            }
                         }
-                    }
-                case .middleClick:
-                    GridRow(alignment: .firstTextBaseline) {
-                        Text("Output:")
-                        Text("Middle mouse button")
-                            .foregroundStyle(.secondary)
+                    } header: {
+                        Text(gesture.displayName)
+                    } footer: {
+                        Text(gesture.detail)
                     }
                 }
-
-                Divider()
             }
+            .formStyle(.grouped)
+            .scrollDisabled(true)
 
             HStack {
                 Spacer()
-                Button("Reset All Gesture Defaults…", role: .destructive) {
+                Button("Reset All Gesture Defaults\u{2026}", role: .destructive) {
                     showsResetDefaultsConfirmation = true
                 }
             }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
         }
-        .padding(20)
         .frame(width: 500)
     }
 
     // MARK: - Advanced
 
     private var advancedTab: some View {
-        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
-            Toggle("Enable debug mode", isOn: Binding(
-                get: { model.isDebugModeEnabled },
-                set: { model.setDebugModeEnabled($0) }
-            ))
+        Form {
+            Section {
+                Toggle("Debug mode", isOn: Binding(
+                    get: { model.isDebugModeEnabled },
+                    set: { model.setDebugModeEnabled($0) }
+                ))
+            } footer: {
+                Text("Keeps recent gesture history and writes a diagnostic log to disk.")
+            }
 
-            Text("Debug mode keeps recent gesture history and writes a diagnostic log to disk.")
-                .foregroundStyle(.secondary)
-
-            Divider()
-
-            HStack(spacing: 12) {
-                Button("Open Troubleshooting…") {
+            Section {
+                Button("Open Troubleshooting\u{2026}") {
                     openWindow(id: AppWindowID.troubleshooting)
                 }
 
                 if model.isDebugModeEnabled {
-                    Button("Open Log") {
+                    Button("Open Debug Log") {
                         model.openDebugLog()
                     }
 
@@ -227,7 +232,8 @@ struct SettingsView: View {
                 }
             }
         }
-        .padding(20)
+        .formStyle(.grouped)
+        .scrollDisabled(true)
         .frame(width: 500)
     }
 }

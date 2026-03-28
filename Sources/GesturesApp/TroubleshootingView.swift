@@ -7,16 +7,23 @@ struct TroubleshootingView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 16) {
                 statusSection
-                diagnosticsSection
                 hapticsSection
-                detectedGesturesSection
-                debugLogSection
+
+                if model.isDebugModeEnabled {
+                    diagnosticsSection
+                    detectedGesturesSection
+                    debugLogSection
+                } else {
+                    Text("Enable debug mode in Settings \u{2192} Advanced for capture diagnostics and gesture history.")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .padding(20)
         }
-        .frame(minWidth: 680, minHeight: 560)
+        .frame(minWidth: 620, minHeight: 400)
         .alert(
             "Clear Debug Log?",
             isPresented: $showsClearLogConfirmation
@@ -82,47 +89,6 @@ struct TroubleshootingView: View {
     }
 
     @ViewBuilder
-    private var diagnosticsSection: some View {
-        if model.isDebugModeEnabled {
-            GroupBox("Capture Diagnostics") {
-                VStack(alignment: .leading, spacing: 12) {
-                    LabeledContent("Framework") {
-                        Text(model.captureDiagnostics.frameworkLoaded ? "Loaded" : "Unavailable")
-                    }
-                    LabeledContent("Enumerated Devices") {
-                        Text("\(model.captureDiagnostics.enumeratedDeviceCount)")
-                    }
-                    LabeledContent("Started Devices") {
-                        Text("\(model.captureDiagnostics.startedDeviceCount)")
-                    }
-                    LabeledContent("Registered Callbacks") {
-                        Text("\(model.captureDiagnostics.successfulRegistrationCount)")
-                    }
-                    LabeledContent("Callback Count") {
-                        Text("\(model.captureDiagnostics.callbackCount)")
-                    }
-                    LabeledContent("Last Callback") {
-                        Text(
-                            model.captureDiagnostics.lastCallbackAt?.formatted(.dateTime.hour().minute().second())
-                                ?? "Never"
-                        )
-                    }
-
-                    Text(model.captureDiagnostics.statusSummary)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        } else {
-            ContentUnavailableView(
-                "Debug Diagnostics Are Off",
-                systemImage: "ladybug.slash",
-                description: Text("Enable debug mode in Settings to capture gesture history and low-level diagnostics.")
-            )
-        }
-    }
-
-    @ViewBuilder
     private var hapticsSection: some View {
         GroupBox("Haptics") {
             VStack(alignment: .leading, spacing: 12) {
@@ -149,80 +115,99 @@ struct TroubleshootingView: View {
     }
 
     @ViewBuilder
-    private var detectedGesturesSection: some View {
-        if model.isDebugModeEnabled {
-            GroupBox("Detected Gestures") {
-                if model.recentDetections.isEmpty {
-                    ContentUnavailableView(
-                        "No Gestures Detected Yet",
-                        systemImage: "hand.tap",
-                        description: Text("Use this window while testing a gesture to confirm capture is working.")
-                    )
-                    .frame(maxWidth: .infinity)
-                } else {
-                    Table(model.recentDetections) {
-                        TableColumn("Gesture") { detection in
-                            Text(detection.kind.displayName)
-                        }
-                        .width(min: 180)
-
-                        TableColumn("Time") { detection in
-                            Text(detection.detectedAt.formatted(.dateTime.hour().minute().second()))
-                                .foregroundStyle(.secondary)
-                        }
-                        .width(min: 110)
-
-                        TableColumn("Result") { detection in
-                            Text(detection.detail)
-                        }
-                    }
-                    .frame(minHeight: 220)
+    private var diagnosticsSection: some View {
+        GroupBox("Capture Diagnostics") {
+            VStack(alignment: .leading, spacing: 12) {
+                LabeledContent("Framework") {
+                    Text(model.captureDiagnostics.frameworkLoaded ? "Loaded" : "Unavailable")
                 }
+                LabeledContent("Enumerated Devices") {
+                    Text("\(model.captureDiagnostics.enumeratedDeviceCount)")
+                }
+                LabeledContent("Started Devices") {
+                    Text("\(model.captureDiagnostics.startedDeviceCount)")
+                }
+                LabeledContent("Registered Callbacks") {
+                    Text("\(model.captureDiagnostics.successfulRegistrationCount)")
+                }
+                LabeledContent("Callback Count") {
+                    Text("\(model.captureDiagnostics.callbackCount)")
+                }
+                LabeledContent("Last Callback") {
+                    Text(
+                        model.captureDiagnostics.lastCallbackAt?.formatted(.dateTime.hour().minute().second())
+                            ?? "Never"
+                    )
+                }
+
+                Text(model.captureDiagnostics.statusSummary)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private var detectedGesturesSection: some View {
+        GroupBox("Detected Gestures") {
+            if model.recentDetections.isEmpty {
+                Text("Perform a gesture to confirm capture is working.")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8)
+            } else {
+                Table(model.recentDetections) {
+                    TableColumn("Gesture") { detection in
+                        Text(detection.kind.displayName)
+                    }
+                    .width(min: 180)
+
+                    TableColumn("Time") { detection in
+                        Text(detection.detectedAt.formatted(.dateTime.hour().minute().second()))
+                            .foregroundStyle(.secondary)
+                    }
+                    .width(min: 110)
+
+                    TableColumn("Result") { detection in
+                        Text(detection.detail)
+                    }
+                }
+                .frame(minHeight: 180)
             }
         }
     }
 
     @ViewBuilder
     private var debugLogSection: some View {
-        if model.isDebugModeEnabled {
-            GroupBox("Debug Log") {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("High-volume touch diagnostics are written to disk to keep this window responsive.")
-                        .foregroundStyle(.secondary)
+        GroupBox("Debug Log") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("High-volume touch diagnostics are written to disk to keep this window responsive.")
+                    .foregroundStyle(.secondary)
 
-                    Text(model.debugLogPath)
-                        .font(.footnote.monospaced())
-                        .textSelection(.enabled)
-                        .draggable(URL(fileURLWithPath: model.debugLogPath))
-                        .contextMenu {
-                            Button("Copy Path") {
-                                model.copyDebugLogPath()
-                            }
-                            Button("Open Log") {
-                                model.openDebugLog()
-                            }
-                            Button("Reveal in Finder") {
-                                model.revealDebugLogInFinder()
-                            }
-                        }
-
-                    HStack {
+                Text(model.debugLogPath)
+                    .font(.footnote.monospaced())
+                    .textSelection(.enabled)
+                    .draggable(URL(fileURLWithPath: model.debugLogPath))
+                    .contextMenu {
                         Button("Copy Path") {
                             model.copyDebugLogPath()
                         }
-                        Button("Open Log") {
-                            model.openDebugLog()
-                        }
-                        Button("Reveal in Finder") {
-                            model.revealDebugLogInFinder()
-                        }
-                        Button("Clear Log", role: .destructive) {
-                            showsClearLogConfirmation = true
-                        }
+                    }
+
+                HStack {
+                    Button("Open Log") {
+                        model.openDebugLog()
+                    }
+                    Button("Reveal in Finder") {
+                        model.revealDebugLogInFinder()
+                    }
+                    Spacer()
+                    Button("Clear Log", role: .destructive) {
+                        showsClearLogConfirmation = true
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

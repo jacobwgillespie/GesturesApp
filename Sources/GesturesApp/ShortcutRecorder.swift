@@ -27,7 +27,7 @@ struct ShortcutRecorder: View {
             }
 
             if isRecording {
-                Text("Press a key chord. Esc cancels, ⌫ resets to default.")
+                Text("Press a key combination. Esc cancels, ⌫ resets to default.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
