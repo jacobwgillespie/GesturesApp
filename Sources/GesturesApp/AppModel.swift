@@ -72,6 +72,7 @@ final class AppModel: ObservableObject {
 
     let store = GestureBindingStore()
 
+    private let clickSuppressor: ClickSuppressor
     private let dispatcher: ShortcutDispatching
     private let hapticPerformer: GestureHapticPerforming
     private let service: MultitouchService
@@ -91,11 +92,15 @@ final class AppModel: ObservableObject {
         self.userDefaults = userDefaults
         self.isDebugModeEnabled = isDebugModeEnabled
         debugLogWriter.setEnabled(isDebugModeEnabled)
+        self.clickSuppressor = ClickSuppressor(logger: { message in
+            debugLogWriter.append(message)
+        })
         self.dispatcher = dispatcher ?? ShortcutDispatcher(logger: { message in
             debugLogWriter.append(message)
         })
         self.hapticPerformer = hapticPerformer
         self.service = service
+        self.service.clickSuppressor = clickSuppressor
         debugLogPath = debugLogWriter.logFileURL.path
 
         service.onGesture = { [weak self] event in
@@ -167,6 +172,7 @@ final class AppModel: ObservableObject {
         isCaptureRunning = false
         debugLogWriter.append("Restarting capture")
         service.stop()
+        clickSuppressor.start()
         let started = service.start()
         isCaptureRunning = started
         captureMessage = started
@@ -177,6 +183,7 @@ final class AppModel: ObservableObject {
 
     func stopCapture() {
         service.stop()
+        clickSuppressor.stop()
         isCaptureRunning = false
         captureMessage = "Capture is stopped."
         debugLogWriter.append("Capture stopped")

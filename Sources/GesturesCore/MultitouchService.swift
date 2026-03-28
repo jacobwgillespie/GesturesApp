@@ -41,6 +41,7 @@ public final class MultitouchService: @unchecked Sendable {
     public var onGesture: (@Sendable (GestureEvent) -> Void)?
     public var onFrame: (@Sendable (TouchFrame) -> Void)?
     public var onDiagnostics: (@Sendable (CaptureDiagnostics) -> Void)?
+    public var clickSuppressor: ClickSuppressor?
 
     public private(set) var lastErrorMessage: String?
     public private(set) var isRunning = false
@@ -217,6 +218,8 @@ public final class MultitouchService: @unchecked Sendable {
         }
 
         if let event = recognizerLock.withLock({ recognizer.process(frame: frame) }) {
+            let suppressor = stateLock.withLock { clickSuppressor }
+            suppressor?.suppress()
             let handler = stateLock.withLock { onGesture }
             DispatchQueue.main.async {
                 handler?(event)
