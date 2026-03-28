@@ -53,11 +53,3 @@ final class DebugLogWriter: @unchecked Sendable {
         }
     }
 }
-
-private extension NSLock {
-    func withLock<T>(_ operation: () throws -> T) rethrows -> T {
-        lock()
-        defer { unlock() }
-        return try operation()
-    }
-}

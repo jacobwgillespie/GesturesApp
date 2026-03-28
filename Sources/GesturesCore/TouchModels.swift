@@ -36,7 +36,7 @@ public enum TouchPhase: Int32, Codable, Sendable {
     }
 }
 
-public struct TouchContact: Equatable, Hashable, Sendable {
+public struct TouchContact: Equatable, Sendable {
     public var identifier: Int
     public var position: TouchPoint
     public var velocity: TouchPoint

@@ -171,10 +171,6 @@ private struct GestureSession {
     }
 
     private func classifyTipTap() -> GestureEvent? {
-        classifyTipTap(requireAnchorStillActive: false)
-    }
-
-    private func classifyTipTap(requireAnchorStillActive: Bool) -> GestureEvent? {
         guard maxActiveCount == 2, traces.count == 2 else { return nil }
         let orderedTraces = traces.values.sorted { lhs, rhs in
             if lhs.firstTimestamp == rhs.firstTimestamp {
@@ -197,13 +193,6 @@ private struct GestureSession {
         }
         let deltaX = tip.firstPosition.x - anchorPosition.x
         guard abs(deltaX) >= GestureRecognizer.Thresholds.tipSideSeparation else { return nil }
-
-        if requireAnchorStillActive {
-            guard let lastSnapshot = snapshots.last else { return nil }
-            let activeIdentifiers = Set(lastSnapshot.contacts.map(\.identifier))
-            guard activeIdentifiers.contains(anchor.id) else { return nil }
-            guard !activeIdentifiers.contains(tip.id) else { return nil }
-        }
 
         let kind: GestureKind = deltaX < 0 ? .twoFingerTipTapLeft : .twoFingerTipTapRight
         return GestureEvent(kind: kind, timestamp: lastTimestamp)

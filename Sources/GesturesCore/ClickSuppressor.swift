@@ -54,9 +54,9 @@ public final class ClickSuppressor: @unchecked Sendable {
 
     /// Begin suppressing left-click events. Safe to call from any thread.
     public func suppress() {
-        lock.lock()
-        suppressUntil = ProcessInfo.processInfo.systemUptime + Self.suppressionDuration
-        lock.unlock()
+        lock.withLock {
+            suppressUntil = ProcessInfo.processInfo.systemUptime + Self.suppressionDuration
+        }
         logger?("ClickSuppressor: suppressing clicks for \(Self.suppressionDuration)s")
     }
 
@@ -73,9 +73,9 @@ public final class ClickSuppressor: @unchecked Sendable {
     }
 
     fileprivate func shouldSuppress() -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return ProcessInfo.processInfo.systemUptime < suppressUntil
+        lock.withLock {
+            ProcessInfo.processInfo.systemUptime < suppressUntil
+        }
     }
 
     fileprivate func reenableIfNeeded() {

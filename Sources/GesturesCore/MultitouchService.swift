@@ -193,20 +193,21 @@ public final class MultitouchService: @unchecked Sendable {
 
         let contacts = rawTouches.compactMap(TouchContact.init(rawTouch:))
         let frame = TouchFrame(timestamp: timestamp, contacts: contacts)
-        let diagnosticsShouldPublish = stateLock.withLock {
+        let (diagnosticsShouldPublish, frameHandler, shouldPublishFrame) = stateLock.withLock {
             diagnostics.callbackCount += 1
             diagnostics.lastCallbackAt = Date()
+            let publishDiag: Bool
             if diagnostics.callbackCount == 1 {
                 diagnostics.statusSummary = "Receiving touch callbacks."
-                return true
+                publishDiag = true
+            } else {
+                publishDiag = diagnostics.callbackCount.isMultiple(of: 100)
             }
-            return diagnostics.callbackCount.isMultiple(of: 100)
-        }
-        let frameHandler = stateLock.withLock { onFrame }
-        let shouldPublishFrame = stateLock.withLock {
+            let handler = onFrame
             let signature = frame.debugSignature
-            defer { lastPublishedFrameSignature = signature }
-            return signature != lastPublishedFrameSignature
+            let publishFrame = signature != lastPublishedFrameSignature
+            lastPublishedFrameSignature = signature
+            return (publishDiag, handler, publishFrame)
         }
         if diagnosticsShouldPublish {
             publishDiagnostics()
@@ -218,21 +219,12 @@ public final class MultitouchService: @unchecked Sendable {
         }
 
         if let event = recognizerLock.withLock({ recognizer.process(frame: frame) }) {
-            let suppressor = stateLock.withLock { clickSuppressor }
+            let (suppressor, handler) = stateLock.withLock { (clickSuppressor, onGesture) }
             suppressor?.suppress()
-            let handler = stateLock.withLock { onGesture }
             DispatchQueue.main.async {
                 handler?(event)
             }
         }
-    }
-}
-
-private extension NSLock {
-    func withLock<T>(_ operation: () throws -> T) rethrows -> T {
-        lock()
-        defer { unlock() }
-        return try operation()
     }
 }
 

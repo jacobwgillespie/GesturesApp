@@ -8,15 +8,15 @@ public final class GestureBindingStore: ObservableObject {
 
     private let userDefaults: UserDefaults
     private let storageKey: String
-    private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
+    private static let encoder = JSONEncoder()
+    private static let decoder = JSONDecoder()
 
     public init(userDefaults: UserDefaults = .standard, storageKey: String = GestureBindingStore.defaultsKey) {
         self.userDefaults = userDefaults
         self.storageKey = storageKey
 
         if let data = userDefaults.data(forKey: storageKey),
-           let decoded = try? decoder.decode([GestureKind: GestureBindingConfiguration].self, from: data) {
+           let decoded = try? Self.decoder.decode([GestureKind: GestureBindingConfiguration].self, from: data) {
             bindings = GestureBindingStore.mergingMissingDefaults(into: decoded)
         } else {
             bindings = GestureBindingStore.defaultBindings
@@ -67,7 +67,7 @@ public final class GestureBindingStore: ObservableObject {
     }
 
     private func persist() {
-        guard let data = try? encoder.encode(bindings) else { return }
+        guard let data = try? Self.encoder.encode(bindings) else { return }
         userDefaults.set(data, forKey: storageKey)
     }
 
