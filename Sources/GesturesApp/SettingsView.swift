@@ -40,6 +40,9 @@ struct SettingsView: View {
             measureAndResize(animated: false)
         }
         .onChange(of: selectedPane) { _, _ in measureAndResize(animated: true) }
+        .onChange(of: model.isDebugModeEnabled) { _, _ in
+            measureAndResize(animated: true)
+        }
         .alert(
             "Reset All Gesture Defaults?",
             isPresented: $showsResetDefaultsConfirmation
