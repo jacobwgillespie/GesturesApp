@@ -195,6 +195,7 @@ struct SettingsView: View {
             .padding(.bottom, 16)
         }
         .frame(width: 500)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: - Advanced
