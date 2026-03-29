@@ -181,14 +181,6 @@ final class AppModel: ObservableObject {
         debugLogWriter.append("Capture start result: \(captureMessage)")
     }
 
-    func stopCapture() {
-        service.stop()
-        clickSuppressor.stop()
-        isCaptureRunning = false
-        captureMessage = "Capture is stopped."
-        debugLogWriter.append("Capture stopped")
-    }
-
     func resetDefaults() {
         store.resetToDefaults()
         debugLogWriter.append("Reset bindings to defaults")

@@ -10,6 +10,7 @@ Minimal macOS menu bar utility that maps trackpad gestures to keyboard shortcuts
 | Three-Finger Swipe Down  | Three fingers swipe downward together                   | Cmd+W                |
 | Two-Finger Tip-Tap Left  | One finger anchors while a second taps to its left side | Opt+Cmd+Left         |
 | Two-Finger Tip-Tap Right | One finger anchors while a second taps to its right     | Opt+Cmd+Right        |
+| Three-Finger Tip-Tap Left | Two fingers anchor while a third taps on their left side | Cmd+R              |
 
 Each gesture can be individually enabled/disabled and remapped to a custom keyboard shortcut or middle click via the Settings window.
 

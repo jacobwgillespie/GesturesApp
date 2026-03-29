@@ -3,10 +3,6 @@ import GesturesCore
 import XCTest
 
 final class GestureBindingStoreTests: XCTestCase {
-    override func tearDown() {
-        super.tearDown()
-    }
-
     func testSaveAndLoadBindings() throws {
         let suiteName = "GestureBindingStoreTests.saveAndLoad.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

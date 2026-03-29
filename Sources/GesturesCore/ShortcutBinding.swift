@@ -16,15 +16,6 @@ public struct ShortcutBinding: Codable, Hashable, Sendable {
             .intersection([.command, .option, .control, .shift])
     }
 
-    public var cgEventFlags: CGEventFlags {
-        var flags: CGEventFlags = []
-        if modifierFlags.contains(.command) { flags.insert(.maskCommand) }
-        if modifierFlags.contains(.option) { flags.insert(.maskAlternate) }
-        if modifierFlags.contains(.control) { flags.insert(.maskControl) }
-        if modifierFlags.contains(.shift) { flags.insert(.maskShift) }
-        return flags
-    }
-
     public var displayString: String {
         let modifiers = [
             modifierFlags.contains(.control) ? "⌃" : "",
