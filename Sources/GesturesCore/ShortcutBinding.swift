@@ -1,30 +1,34 @@
-import AppKit
-import CoreGraphics
 import Foundation
 
 public struct ShortcutBinding: Codable, Hashable, Sendable {
     public var keyCode: UInt16
     public var modifierFlagsRawValue: UInt
 
-    public init(keyCode: UInt16, modifierFlags: NSEvent.ModifierFlags) {
+    public init(keyCode: UInt16, modifierFlagsRawValue: UInt) {
         self.keyCode = keyCode
-        self.modifierFlagsRawValue = modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue
-    }
-
-    public var modifierFlags: NSEvent.ModifierFlags {
-        NSEvent.ModifierFlags(rawValue: modifierFlagsRawValue)
-            .intersection([.command, .option, .control, .shift])
+        self.modifierFlagsRawValue = modifierFlagsRawValue
     }
 
     public var displayString: String {
         let modifiers = [
-            modifierFlags.contains(.control) ? "⌃" : "",
-            modifierFlags.contains(.option) ? "⌥" : "",
-            modifierFlags.contains(.shift) ? "⇧" : "",
-            modifierFlags.contains(.command) ? "⌘" : "",
+            modifierFlagsRawValue.hasFlag(controlModifierFlag) ? "⌃" : "",
+            modifierFlagsRawValue.hasFlag(optionModifierFlag) ? "⌥" : "",
+            modifierFlagsRawValue.hasFlag(shiftModifierFlag) ? "⇧" : "",
+            modifierFlagsRawValue.hasFlag(commandModifierFlag) ? "⌘" : "",
         ].joined()
 
         return modifiers + ShortcutKeyNameResolver.name(for: keyCode)
+    }
+}
+
+private let commandModifierFlag: UInt = 1 << 20
+private let optionModifierFlag: UInt = 1 << 19
+private let controlModifierFlag: UInt = 1 << 18
+private let shiftModifierFlag: UInt = 1 << 17
+
+private extension UInt {
+    func hasFlag(_ flag: UInt) -> Bool {
+        self & flag == flag
     }
 }
 

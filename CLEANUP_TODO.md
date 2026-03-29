@@ -7,5 +7,5 @@
 - [x] Split `AppModel` responsibilities into smaller focused types.
 - [x] Refactor `GestureRecognizer` to extract shared tip-tap machinery.
 - [x] Encapsulate `MultitouchService` callback and device-session state.
-- [ ] Reduce platform coupling and dead surface in core models where practical.
+- [x] Reduce platform coupling and dead surface in core models where practical.
 - [ ] Centralize packaging metadata and add installer smoke verification.
