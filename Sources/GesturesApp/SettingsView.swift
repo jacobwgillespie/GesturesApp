@@ -9,12 +9,16 @@ private enum SettingsPane: Hashable {
 
 struct SettingsView: View {
     @ObservedObject var model: AppModel
-    @ObservedObject var store: GestureBindingStore
+    @ObservedObject private var store: GestureBindingStore
     @Environment(\.openWindow) private var openWindow
 
     @State private var selectedPane: SettingsPane = .general
     @State private var showsResetDefaultsConfirmation = false
-    @State private var tabContentHeight: CGFloat = 200
+
+    init(model: AppModel) {
+        self.model = model
+        _store = ObservedObject(wrappedValue: model.store)
+    }
 
     var body: some View {
         TabView(selection: $selectedPane) {
@@ -30,12 +34,10 @@ struct SettingsView: View {
                 advancedTab
             }
         }
-        .frame(height: tabContentHeight)
+        .frame(minWidth: 500, idealWidth: 500, maxWidth: 500, minHeight: 420, alignment: .top)
         .onAppear {
             AppNavigation.activate()
-            measureAndResize(animated: false)
         }
-        .onChange(of: selectedPane) { _, _ in measureAndResize(animated: true) }
         .alert(
             "Reset All Gesture Defaults?",
             isPresented: $showsResetDefaultsConfirmation
@@ -63,29 +65,6 @@ struct SettingsView: View {
             }
         } message: {
             Text(model.launchAtLoginErrorMessage ?? "")
-        }
-    }
-
-    // MARK: - Tab sizing
-
-    private func measureAndResize(animated: Bool) {
-        let content: AnyView
-        switch selectedPane {
-        case .general: content = AnyView(generalTab)
-        case .gestures: content = AnyView(gesturesTab)
-        case .advanced: content = AnyView(advancedTab)
-        }
-
-        let sizing = NSHostingController(rootView: content)
-        sizing.sizingOptions = .intrinsicContentSize
-        let ideal = sizing.view.fittingSize
-
-        if animated {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                tabContentHeight = ideal.height
-            }
-        } else {
-            tabContentHeight = ideal.height
         }
     }
 
@@ -134,8 +113,6 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .scrollDisabled(true)
-        .frame(width: 500)
     }
 
     // MARK: - Gestures
@@ -189,7 +166,6 @@ struct SettingsView: View {
                 }
             }
             .formStyle(.grouped)
-            .scrollDisabled(true)
 
             HStack {
                 Spacer()
@@ -200,7 +176,6 @@ struct SettingsView: View {
             .padding(.horizontal, 20)
             .padding(.bottom, 16)
         }
-        .frame(width: 500)
     }
 
     // MARK: - Advanced
@@ -233,7 +208,5 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .scrollDisabled(true)
-        .frame(width: 500)
     }
 }
