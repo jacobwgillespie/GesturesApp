@@ -12,7 +12,16 @@ Minimal macOS menu bar utility that maps trackpad gestures to keyboard shortcuts
 | Two-Finger Tip-Tap Right  | One finger anchors while a second taps to its right      | Opt+Cmd+Right  |
 | Three-Finger Tip-Tap Left | Two fingers anchor while a third taps on their left side | Cmd+R          |
 
-Each gesture can be individually enabled/disabled and remapped to a custom keyboard shortcut or middle click via the Settings window.
+Each gesture can be enabled/disabled, remapped to a keyboard shortcut or middle click, and has an optional haptic feedback toggle.
+
+## Features
+
+- Menu bar app, no dock icon
+- Remap gestures to keyboard shortcuts or middle click
+- Per-gesture haptic feedback
+- Launch at login
+- Click suppression during gesture recognition
+- Debug logging and troubleshooting window
 
 ## Requirements
 
@@ -25,8 +34,7 @@ Each gesture can be individually enabled/disabled and remapped to a custom keybo
 scripts/install-app.sh
 ```
 
-This builds the app with SwiftPM, creates a signed `.app` bundle, and installs it to `~/Applications`.
-The installer now runs a bundle smoke check after installation, including `Info.plist` validation and `codesign --verify`.
+This builds the app with SwiftPM, creates a signed `.app` bundle, and installs it to `~/Applications`. The installer verifies the bundle after installation (`Info.plist` validation and `codesign --verify`).
 
 Options:
 
@@ -54,3 +62,7 @@ swift run GesturesApp
 ```
 
 The app uses the private `MultitouchSupport.framework` for raw trackpad data, so it is intended for direct distribution rather than the App Store.
+
+## License
+
+MIT, see [LICENSE](LICENSE) for details.
