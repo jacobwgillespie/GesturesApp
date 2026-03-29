@@ -3,7 +3,7 @@
 - [x] Fix stale docs and remove obvious stale or unused code.
 - [x] Remove duplicated diagnostics view-model shaping between app and core.
 - [x] Simplify settings state flow and remove imperative tab sizing.
-- [ ] Centralize repeated app actions and window/navigation wiring.
+- [x] Centralize repeated app actions and window/navigation wiring.
 - [ ] Split `AppModel` responsibilities into smaller focused types.
 - [ ] Refactor `GestureRecognizer` to extract shared tip-tap machinery.
 - [ ] Encapsulate `MultitouchService` callback and device-session state.

@@ -8,8 +8,7 @@ struct MenuBarContentView: View {
     var body: some View {
         Group {
             Button {
-                AppNavigation.activate()
-                openSettings()
+                AppNavigation.openSettings(using: openSettings)
             } label: {
                 Label("Settings\u{2026}", systemImage: "gearshape")
             }
@@ -33,24 +32,15 @@ struct MenuBarContentView: View {
             Divider()
 
             if !model.isAccessibilityTrusted {
-                Button("Grant Accessibility Access") {
-                    model.requestAccessibilityAccess()
-                }
-
-                Button("Open Accessibility Settings") {
-                    model.openAccessibilitySettings()
-                }
+                AccessibilityActionButtons(model: model)
             }
 
-            Button("Restart Capture") {
-                model.restartCapture()
-            }
+            RestartCaptureButton(model: model)
 
             Divider()
 
             Button {
-                AppNavigation.activate()
-                openWindow(id: AppWindowID.troubleshooting)
+                AppNavigation.openTroubleshooting(using: openWindow)
             } label: {
                 Label("Troubleshooting\u{2026}", systemImage: "stethoscope")
             }
@@ -62,7 +52,7 @@ struct MenuBarContentView: View {
             }
 
             Button("Quit Gestures") {
-                NSApplication.shared.terminate(nil)
+                AppNavigation.quit()
             }
             .keyboardShortcut("q", modifiers: .command)
         }

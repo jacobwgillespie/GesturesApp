@@ -69,19 +69,8 @@ struct TroubleshootingView: View {
                     .foregroundStyle(.secondary)
 
                 HStack {
-                    Button("Restart Capture") {
-                        model.restartCapture()
-                    }
-
-                    if !model.isAccessibilityTrusted {
-                        Button("Grant Accessibility Access") {
-                            model.requestAccessibilityAccess()
-                        }
-
-                        Button("Open Accessibility Settings") {
-                            model.openAccessibilitySettings()
-                        }
-                    }
+                    RestartCaptureButton(model: model)
+                    AccessibilityActionButtons(model: model)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

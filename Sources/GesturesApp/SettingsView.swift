@@ -82,19 +82,7 @@ struct SettingsView: View {
                 }
 
                 HStack(spacing: 8) {
-                    Button("Open Settings\u{2026}") {
-                        model.openAccessibilitySettings()
-                    }
-
-                    if !model.isAccessibilityTrusted {
-                        Button("Grant Access") {
-                            model.requestAccessibilityAccess()
-                        }
-                    }
-
-                    Button("Check Again") {
-                        model.refreshAccessibilityStatus()
-                    }
+                    AccessibilityActionButtons(model: model, showRefreshButton: true)
                 }
             } header: {
                 Text("Accessibility")
@@ -193,7 +181,7 @@ struct SettingsView: View {
 
             Section {
                 Button("Open Troubleshooting\u{2026}") {
-                    openWindow(id: AppWindowID.troubleshooting)
+                    AppNavigation.openTroubleshooting(using: openWindow)
                 }
 
                 if model.isDebugModeEnabled {

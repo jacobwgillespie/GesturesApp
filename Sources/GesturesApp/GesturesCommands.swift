@@ -14,16 +14,14 @@ struct GesturesCommands: Commands {
 
         CommandGroup(replacing: .appSettings) {
             Button("Settings…") {
-                AppNavigation.activate()
-                openSettings()
+                AppNavigation.openSettings(using: openSettings)
             }
             .keyboardShortcut(",", modifiers: .command)
         }
 
         CommandMenu("Gestures") {
             Button("Troubleshooting…") {
-                AppNavigation.activate()
-                openWindow(id: AppWindowID.troubleshooting)
+                AppNavigation.openTroubleshooting(using: openWindow)
             }
             .keyboardShortcut("?", modifiers: [.command, .shift])
 
@@ -46,7 +44,7 @@ struct GesturesCommands: Commands {
 
         CommandGroup(replacing: .appTermination) {
             Button("Quit Gestures") {
-                NSApplication.shared.terminate(nil)
+                AppNavigation.quit()
             }
             .keyboardShortcut("q", modifiers: .command)
         }
