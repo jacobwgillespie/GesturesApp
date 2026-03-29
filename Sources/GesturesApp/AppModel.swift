@@ -1,7 +1,6 @@
 import AppKit
 import Foundation
 import GesturesCore
-import ServiceManagement
 
 struct DetectedGestureEntry: Identifiable {
     let id = UUID()
@@ -66,7 +65,9 @@ final class AppModel: ObservableObject {
     private let dispatcher: ShortcutDispatching
     private let hapticPerformer: GestureHapticPerforming
     private let service: MultitouchService
-    private let debugLogWriter: DebugLogWriter
+    private let accessibilityController: AccessibilityAccessController
+    private let launchAtLoginController: LaunchAtLoginController
+    private let debugLog: DebugLogActions
     private let userDefaults: UserDefaults
     private var hasBootstrapped = false
 
@@ -78,10 +79,13 @@ final class AppModel: ObservableObject {
         userDefaults: UserDefaults = .standard
     ) {
         let isDebugModeEnabled = userDefaults.bool(forKey: Self.debugModeDefaultsKey)
-        self.debugLogWriter = debugLogWriter
+        let debugLog = DebugLogActions(writer: debugLogWriter)
+        self.accessibilityController = AccessibilityAccessController()
+        self.launchAtLoginController = LaunchAtLoginController()
+        self.debugLog = debugLog
         self.userDefaults = userDefaults
         self.isDebugModeEnabled = isDebugModeEnabled
-        debugLogWriter.setEnabled(isDebugModeEnabled)
+        debugLog.setLoggingEnabled(isDebugModeEnabled)
         self.clickSuppressor = ClickSuppressor(logger: { message in
             debugLogWriter.append(message)
         })
@@ -91,7 +95,7 @@ final class AppModel: ObservableObject {
         self.hapticPerformer = hapticPerformer
         self.service = service
         self.service.clickSuppressor = clickSuppressor
-        debugLogPath = debugLogWriter.logFileURL.path
+        debugLogPath = debugLog.logFilePath
 
         service.onGesture = { [weak self] event in
             Task { @MainActor [weak self] in
@@ -116,42 +120,32 @@ final class AppModel: ObservableObject {
     func bootstrap() {
         guard !hasBootstrapped else { return }
         hasBootstrapped = true
-        debugLogWriter.append("Application bootstrapping")
+        debugLog.append("Application bootstrapping")
         refreshAccessibilityStatus()
         refreshLaunchAtLoginStatus()
         restartCapture()
     }
 
     func refreshAccessibilityStatus() {
-        isAccessibilityTrusted = PermissionsManager.isAccessibilityTrusted(prompt: false)
+        isAccessibilityTrusted = accessibilityController.refreshStatus()
     }
 
     func requestAccessibilityAccess() {
-        debugLogWriter.append("Prompting for Accessibility access")
-        isAccessibilityTrusted = PermissionsManager.isAccessibilityTrusted(prompt: true)
+        debugLog.append("Prompting for Accessibility access")
+        isAccessibilityTrusted = accessibilityController.requestAccess()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { [weak self] in
             self?.refreshAccessibilityStatus()
         }
     }
 
     func openAccessibilitySettings() {
-        let candidates = [
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
-        ]
-
-        for candidate in candidates {
-            guard let url = URL(string: candidate) else { continue }
-            if NSWorkspace.shared.open(url) {
-                return
-            }
-        }
+        accessibilityController.openSettings()
     }
 
     func restartCapture() {
         captureMessage = "Starting capture…"
         isCaptureRunning = false
-        debugLogWriter.append("Restarting capture")
+        debugLog.append("Restarting capture")
         service.stop()
         clickSuppressor.start()
         let started = service.start()
@@ -159,53 +153,37 @@ final class AppModel: ObservableObject {
         captureMessage = started
             ? "Capture is running for available trackpads."
             : (service.lastErrorMessage ?? "Capture could not be started.")
-        debugLogWriter.append("Capture start result: \(captureMessage)")
+        debugLog.append("Capture start result: \(captureMessage)")
     }
 
     func resetDefaults() {
         store.resetToDefaults()
-        debugLogWriter.append("Reset bindings to defaults")
+        debugLog.append("Reset bindings to defaults")
     }
 
     func openDebugLog() {
-        NSWorkspace.shared.open(debugLogWriter.logFileURL)
+        debugLog.openLog()
     }
 
     func revealDebugLogInFinder() {
-        NSWorkspace.shared.activateFileViewerSelecting([debugLogWriter.logFileURL])
+        debugLog.revealLogInFinder()
     }
 
     func clearDebugLog() {
-        debugLogWriter.clear()
-        debugLogWriter.append("Debug log cleared")
+        debugLog.clearLog()
     }
 
     func copyDebugLogPath() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(debugLogPath, forType: .string)
+        debugLog.copyLogPath()
     }
 
     func refreshLaunchAtLoginStatus() {
-        guard supportsLaunchAtLogin else {
-            isLaunchAtLoginEnabled = false
-            return
-        }
-
-        isLaunchAtLoginEnabled = SMAppService.mainApp.status == .enabled
+        isLaunchAtLoginEnabled = launchAtLoginController.refreshStatus()
     }
 
     func setLaunchAtLoginEnabled(_ isEnabled: Bool) {
-        guard supportsLaunchAtLogin else {
-            launchAtLoginErrorMessage = "Launch at login is only available in the bundled app."
-            return
-        }
-
         do {
-            if isEnabled {
-                try SMAppService.mainApp.register()
-            } else {
-                try SMAppService.mainApp.unregister()
-            }
+            try launchAtLoginController.setEnabled(isEnabled)
             launchAtLoginErrorMessage = nil
         } catch {
             launchAtLoginErrorMessage = error.localizedDescription
@@ -232,10 +210,10 @@ final class AppModel: ObservableObject {
         guard isDebugModeEnabled != isEnabled else { return }
         isDebugModeEnabled = isEnabled
         userDefaults.set(isEnabled, forKey: Self.debugModeDefaultsKey)
-        debugLogWriter.setEnabled(isEnabled)
+        debugLog.setLoggingEnabled(isEnabled)
 
         if isEnabled {
-            debugLogWriter.append("Debug mode enabled")
+            debugLog.append("Debug mode enabled")
             refreshAccessibilityStatus()
             if isCaptureRunning {
                 restartCapture()
@@ -263,7 +241,7 @@ final class AppModel: ObservableObject {
             captureMessage = "\(event.kind.displayName) is ready; lift to trigger."
             if isDebugModeEnabled {
                 recordDetection(kind: event.kind, detail: "Ready; lift to trigger")
-                debugLogWriter.append("Gesture armed: \(event.kind.displayName)")
+                debugLog.append("Gesture armed: \(event.kind.displayName)")
             }
             return
         }
@@ -272,7 +250,7 @@ final class AppModel: ObservableObject {
             captureMessage = "Detected \(event.kind.displayName), but its mapping is disabled."
             if isDebugModeEnabled {
                 recordDetection(kind: event.kind, detail: "Detected only; mapping disabled")
-                debugLogWriter.append("Gesture detected: \(event.kind.displayName) | mapping disabled")
+                debugLog.append("Gesture detected: \(event.kind.displayName) | mapping disabled")
             }
             return
         }
@@ -287,14 +265,14 @@ final class AppModel: ObservableObject {
             if isDebugModeEnabled {
                 recordDetection(kind: event.kind, detail: "Sent \(actionDescription)")
                 let hapticsSuffix = configuration.isHapticsEnabled && event.shouldPlayHaptic ? " | haptics played" : ""
-                debugLogWriter.append("Gesture detected: \(event.kind.displayName) | dispatched \(actionDescription)\(hapticsSuffix)")
+                debugLog.append("Gesture detected: \(event.kind.displayName) | dispatched \(actionDescription)\(hapticsSuffix)")
             }
         } else {
             refreshAccessibilityStatus()
             captureMessage = "Gesture detected, but Accessibility access is still required to send actions."
             if isDebugModeEnabled {
                 recordDetection(kind: event.kind, detail: "Detected only; shortcut dispatch blocked")
-                debugLogWriter.append("Gesture detected: \(event.kind.displayName) | dispatch blocked")
+                debugLog.append("Gesture detected: \(event.kind.displayName) | dispatch blocked")
             }
         }
     }
@@ -321,12 +299,12 @@ final class AppModel: ObservableObject {
                     return "#\(contact.identifier) \(contact.phase.debugLabel) (\(x), \(y))"
                 }
                 .joined(separator: " | ")
-        debugLogWriter.append("Frame: \(summary)")
+        debugLog.append("Frame: \(summary)")
     }
 
     private func logDiagnostics(_ diagnostics: CaptureDiagnostics) {
         guard isDebugModeEnabled else { return }
-        debugLogWriter.append(
+        debugLog.append(
             """
             Diagnostics: framework=\(diagnostics.frameworkLoaded ? "loaded" : "unavailable"), \
             enumerated=\(diagnostics.enumeratedDeviceCount), \
@@ -347,7 +325,7 @@ final class AppModel: ObservableObject {
         }
 
         if isDebugModeEnabled {
-            debugLogWriter.append("Haptic request: kind=\(kind.debugName) source=\(source)")
+            debugLog.append("Haptic request: kind=\(kind.debugName) source=\(source)")
         }
     }
 
@@ -359,28 +337,11 @@ final class AppModel: ObservableObject {
     }
 
     func showAboutPanel() {
-        let shortVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-        let buildVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-
-        var options: [NSApplication.AboutPanelOptionKey: Any] = [
-            .applicationName: "Gestures",
-            .credits: NSAttributedString(
-                string: "Trackpad gesture shortcuts from your Mac menu bar."
-            ),
-        ]
-
-        if let shortVersion, let buildVersion {
-            options[.applicationVersion] = "\(shortVersion) (\(buildVersion))"
-        } else if let shortVersion {
-            options[.applicationVersion] = shortVersion
-        }
-
-        AppNavigation.activate()
-        NSApp.orderFrontStandardAboutPanel(options: options)
+        AboutPanelPresenter.show()
     }
 
     var supportsLaunchAtLogin: Bool {
-        Bundle.main.bundleURL.pathExtension == "app"
+        launchAtLoginController.isSupported
     }
 }
 
