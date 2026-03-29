@@ -84,12 +84,10 @@ private struct GestureSession {
     private(set) var didEmitLiveTipTap = false
     private(set) var didArmThreeFingerSwipeDown = false
     private var tipTapCandidate: TipTapCandidate?
-    private var threeFingerTipTapCandidate: ThreeFingerTipTapCandidate?
     private var lastLiveTipTap: LiveTipTapEmission?
-    private var lastLiveThreeFingerTipTap: LiveThreeFingerTipTapEmission?
 
     var hasTipTapCandidate: Bool {
-        tipTapCandidate != nil || threeFingerTipTapCandidate != nil
+        tipTapCandidate != nil
     }
 
     init(startTimestamp: TimeInterval) {
@@ -187,17 +185,22 @@ private struct GestureSession {
 
     private func classifyThreeFingerTipTap() -> GestureEvent? {
         guard maxActiveCount == 3, traces.count == 3 else { return nil }
-        let orderedTraces = traces.values.sorted { lhs, rhs in
-            if lhs.firstTimestamp == rhs.firstTimestamp {
-                return lhs.id < rhs.id
-            }
-            return lhs.firstTimestamp < rhs.firstTimestamp
-        }
+        return classifyTipTapGesture(anchorCount: 2)
+    }
 
-        let anchors = Array(orderedTraces.prefix(2))
+    private func classifyTipTap() -> GestureEvent? {
+        guard maxActiveCount == 2, traces.count == 2 else { return nil }
+        return classifyTipTapGesture(anchorCount: 1)
+    }
+
+    private func classifyTipTapGesture(anchorCount: Int) -> GestureEvent? {
+        let orderedTraces = orderedContactTraces()
+        guard orderedTraces.count == anchorCount + 1 else { return nil }
+
+        let anchors = Array(orderedTraces.prefix(anchorCount))
         guard let tip = orderedTraces.last else { return nil }
 
-        let latestAnchorStart = max(anchors[0].firstTimestamp, anchors[1].firstTimestamp)
+        let latestAnchorStart = anchors.map(\.firstTimestamp).max() ?? tip.firstTimestamp
         guard (tip.firstTimestamp - latestAnchorStart) >= GestureRecognizer.Thresholds.anchorLeadTime else { return nil }
         guard anchors.allSatisfy({ $0.duration >= GestureRecognizer.Thresholds.anchorMinDuration }) else { return nil }
         guard tip.duration <= GestureRecognizer.Thresholds.tipMaxDuration else { return nil }
@@ -205,47 +208,12 @@ private struct GestureSession {
         guard tip.maxDistanceFromStart <= GestureRecognizer.Thresholds.tipMaxTravel else { return nil }
         guard anchors.allSatisfy({ tip.firstTimestamp <= $0.lastTimestamp }) else { return nil }
 
-        let anchorPos0 = anchors[0].position(closestTo: tip.firstTimestamp)
-        let anchorPos1 = anchors[1].position(closestTo: tip.firstTimestamp)
-        let anchorCentroid = TouchPoint(
-            x: (anchorPos0.x + anchorPos1.x) / 2,
-            y: (anchorPos0.y + anchorPos1.y) / 2
+        let anchorReferencePositions = anchors.map { $0.position(closestTo: tip.firstTimestamp) }
+        return makeTipTapEvent(
+            anchorReferencePositions: anchorReferencePositions,
+            tipFirstPosition: tip.firstPosition,
+            timestamp: lastTimestamp
         )
-        guard anchorCentroid.distance(to: tip.firstPosition) <= GestureRecognizer.Thresholds.tipMaxSeparation else {
-            return nil
-        }
-        let deltaX = tip.firstPosition.x - anchorCentroid.x
-        guard deltaX < -GestureRecognizer.Thresholds.tipSideSeparation else { return nil }
-
-        return GestureEvent(kind: .threeFingerTipTapLeft, timestamp: lastTimestamp)
-    }
-
-    private func classifyTipTap() -> GestureEvent? {
-        guard maxActiveCount == 2, traces.count == 2 else { return nil }
-        let orderedTraces = traces.values.sorted { lhs, rhs in
-            if lhs.firstTimestamp == rhs.firstTimestamp {
-                return lhs.id < rhs.id
-            }
-            return lhs.firstTimestamp < rhs.firstTimestamp
-        }
-
-        guard let anchor = orderedTraces.first, let tip = orderedTraces.last else { return nil }
-        guard (tip.firstTimestamp - anchor.firstTimestamp) >= GestureRecognizer.Thresholds.anchorLeadTime else { return nil }
-        guard anchor.duration >= GestureRecognizer.Thresholds.anchorMinDuration else { return nil }
-        guard tip.duration <= GestureRecognizer.Thresholds.tipMaxDuration else { return nil }
-        guard anchor.maxDistanceFromStart <= GestureRecognizer.Thresholds.anchorMaxTravel else { return nil }
-        guard tip.maxDistanceFromStart <= GestureRecognizer.Thresholds.tipMaxTravel else { return nil }
-        guard tip.firstTimestamp <= anchor.lastTimestamp else { return nil }
-
-        let anchorPosition = anchor.position(closestTo: tip.firstTimestamp)
-        guard anchorPosition.distance(to: tip.firstPosition) <= GestureRecognizer.Thresholds.tipMaxSeparation else {
-            return nil
-        }
-        let deltaX = tip.firstPosition.x - anchorPosition.x
-        guard abs(deltaX) >= GestureRecognizer.Thresholds.tipSideSeparation else { return nil }
-
-        let kind: GestureKind = deltaX < 0 ? .twoFingerTipTapLeft : .twoFingerTipTapRight
-        return GestureEvent(kind: kind, timestamp: lastTimestamp)
     }
 
     private mutating func classifyLiveTipTapIfNeeded() -> GestureEvent? {
@@ -266,103 +234,47 @@ private struct GestureSession {
             tipTapCandidate = nil
             return event
         case (2, 3):
-            tipTapCandidate = nil
-            startThreeFingerTipTapCandidate(previous: previous, current: current)
+            startTipTapCandidate(previous: previous, current: current)
             return nil
         case (3, 3):
-            updateThreeFingerTipTapCandidate(current: current)
+            updateTipTapCandidate(current: current)
             return nil
         case (3, 2):
-            let event = finishThreeFingerTipTapCandidate(current: current)
-            threeFingerTipTapCandidate = nil
+            let event = finishTipTapCandidate(current: current)
+            tipTapCandidate = nil
             return event
         default:
             tipTapCandidate = nil
-            threeFingerTipTapCandidate = nil
             return nil
         }
     }
 
     private mutating func startTipTapCandidate(previous: SessionSnapshot, current: SessionSnapshot) {
-        guard let anchor = previous.contacts.first else {
-            tipTapCandidate = nil
-            return
-        }
-
+        let previousIDs = Set(previous.contacts.map { $0.identifier })
         let currentByIdentifier = Dictionary(uniqueKeysWithValues: current.contacts.map { ($0.identifier, $0) })
-        guard let currentAnchor = currentByIdentifier[anchor.identifier],
-              let tip = current.contacts.first(where: { $0.identifier != anchor.identifier }),
-              let anchorTrace = traces[anchor.identifier] else {
+        let anchors = previous.contacts
+
+        guard !anchors.isEmpty,
+              let tip = current.contacts.first(where: { !previousIDs.contains($0.identifier) }),
+              let candidate = makeTipTapCandidate(
+                anchors: anchors,
+                tip: tip,
+                currentTimestamp: current.timestamp,
+                currentByIdentifier: currentByIdentifier
+              ) else {
             tipTapCandidate = nil
             return
         }
 
-        tipTapCandidate = TipTapCandidate(
-            anchorID: anchor.identifier,
-            tipID: tip.identifier,
-            anchorLeadDuration: current.timestamp - anchorTrace.firstTimestamp,
-            anchorReferencePosition: anchorTrace.position(closestTo: current.timestamp),
-            anchorMaxDistance: currentAnchor.position.distance(to: anchor.position),
-            tipTrace: ContactTrace(id: tip.identifier, firstTimestamp: current.timestamp, firstPosition: tip.position)
-        )
+        tipTapCandidate = candidate
     }
 
     private mutating func updateTipTapCandidate(current: SessionSnapshot) {
         guard var candidate = tipTapCandidate else { return }
         let currentByIdentifier = Dictionary(uniqueKeysWithValues: current.contacts.map { ($0.identifier, $0) })
-        guard let anchor = currentByIdentifier[candidate.anchorID],
-              let tip = currentByIdentifier[candidate.tipID] else {
-            tipTapCandidate = nil
-            return
-        }
-
-        candidate.anchorMaxDistance = max(
-            candidate.anchorMaxDistance,
-            anchor.position.distance(to: candidate.anchorReferencePosition)
-        )
-        candidate.tipTrace.append(timestamp: current.timestamp, position: tip.position)
-        tipTapCandidate = candidate
-    }
-
-    private mutating func startThreeFingerTipTapCandidate(previous: SessionSnapshot, current: SessionSnapshot) {
-        let previousIDs = Set(previous.contacts.map { $0.identifier })
-        let currentByIdentifier = Dictionary(uniqueKeysWithValues: current.contacts.map { ($0.identifier, $0) })
-        guard let tip = current.contacts.first(where: { !previousIDs.contains($0.identifier) }) else {
-            threeFingerTipTapCandidate = nil
-            return
-        }
-
-        let anchors = previous.contacts
-        guard anchors.count == 2,
-              let anchorTrace0 = traces[anchors[0].identifier],
-              let anchorTrace1 = traces[anchors[1].identifier] else {
-            threeFingerTipTapCandidate = nil
-            return
-        }
-
-        let anchorRefPos0 = anchorTrace0.position(closestTo: current.timestamp)
-        let anchorRefPos1 = anchorTrace1.position(closestTo: current.timestamp)
-
-        threeFingerTipTapCandidate = ThreeFingerTipTapCandidate(
-            anchorIDs: [anchors[0].identifier, anchors[1].identifier],
-            tipID: tip.identifier,
-            anchorLeadDuration: current.timestamp - max(anchorTrace0.firstTimestamp, anchorTrace1.firstTimestamp),
-            anchorReferencePositions: [anchorRefPos0, anchorRefPos1],
-            anchorMaxDistances: [
-                currentByIdentifier[anchors[0].identifier]!.position.distance(to: anchors[0].position),
-                currentByIdentifier[anchors[1].identifier]!.position.distance(to: anchors[1].position),
-            ],
-            tipTrace: ContactTrace(id: tip.identifier, firstTimestamp: current.timestamp, firstPosition: tip.position)
-        )
-    }
-
-    private mutating func updateThreeFingerTipTapCandidate(current: SessionSnapshot) {
-        guard var candidate = threeFingerTipTapCandidate else { return }
-        let currentByIdentifier = Dictionary(uniqueKeysWithValues: current.contacts.map { ($0.identifier, $0) })
-
         for i in 0..<candidate.anchorIDs.count {
             guard let anchor = currentByIdentifier[candidate.anchorIDs[i]] else {
-                threeFingerTipTapCandidate = nil
+                tipTapCandidate = nil
                 return
             }
             candidate.anchorMaxDistances[i] = max(
@@ -372,16 +284,41 @@ private struct GestureSession {
         }
 
         guard let tip = currentByIdentifier[candidate.tipID] else {
-            threeFingerTipTapCandidate = nil
+            tipTapCandidate = nil
             return
         }
 
         candidate.tipTrace.append(timestamp: current.timestamp, position: tip.position)
-        threeFingerTipTapCandidate = candidate
+        tipTapCandidate = candidate
     }
 
-    private mutating func finishThreeFingerTipTapCandidate(current: SessionSnapshot) -> GestureEvent? {
-        guard let candidate = threeFingerTipTapCandidate else { return nil }
+    private func makeTipTapCandidate(
+        anchors: [TouchContact],
+        tip: TouchContact,
+        currentTimestamp: TimeInterval,
+        currentByIdentifier: [Int: TouchContact]
+    ) -> TipTapCandidate? {
+        let anchorTraces = anchors.compactMap { traces[$0.identifier] }
+        guard anchorTraces.count == anchors.count else { return nil }
+
+        let anchorReferencePositions = anchorTraces.map { $0.position(closestTo: currentTimestamp) }
+        let anchorLeadDuration = currentTimestamp - (anchorTraces.map(\.firstTimestamp).max() ?? currentTimestamp)
+        let anchorMaxDistances = anchors.enumerated().map { index, anchor in
+            currentByIdentifier[anchor.identifier]!.position.distance(to: anchor.position)
+        }
+
+        return TipTapCandidate(
+            anchorIDs: anchors.map(\.identifier),
+            tipID: tip.identifier,
+            anchorLeadDuration: anchorLeadDuration,
+            anchorReferencePositions: anchorReferencePositions,
+            anchorMaxDistances: anchorMaxDistances,
+            tipTrace: ContactTrace(id: tip.identifier, firstTimestamp: currentTimestamp, firstPosition: tip.position)
+        )
+    }
+
+    private mutating func finishTipTapCandidate(current: SessionSnapshot) -> GestureEvent? {
+        guard let candidate = tipTapCandidate else { return nil }
 
         let currentByIdentifier = Dictionary(uniqueKeysWithValues: current.contacts.map { ($0.identifier, $0) })
         guard candidate.anchorIDs.allSatisfy({ currentByIdentifier[$0] != nil }) else { return nil }
@@ -401,83 +338,82 @@ private struct GestureSession {
             }
         }
 
-        let anchorCentroid = TouchPoint(
-            x: (candidate.anchorReferencePositions[0].x + candidate.anchorReferencePositions[1].x) / 2,
-            y: (candidate.anchorReferencePositions[0].y + candidate.anchorReferencePositions[1].y) / 2
-        )
-        guard anchorCentroid.distance(to: candidate.tipTrace.firstPosition)
-            <= GestureRecognizer.Thresholds.tipMaxSeparation else {
-            return nil
-        }
-        let deltaX = candidate.tipTrace.firstPosition.x - anchorCentroid.x
-        guard deltaX < -GestureRecognizer.Thresholds.tipSideSeparation else { return nil }
-
-        let kind: GestureKind = .threeFingerTipTapLeft
-        if let lastLiveThreeFingerTipTap,
-           lastLiveThreeFingerTipTap.kind == kind,
-           Set(lastLiveThreeFingerTipTap.anchorIDs) == Set(candidate.anchorIDs),
-           current.timestamp - lastLiveThreeFingerTipTap.timestamp < GestureRecognizer.Thresholds.repeatedTipTapCooldown {
-            return nil
-        }
-
-        lastLiveThreeFingerTipTap = LiveThreeFingerTipTapEmission(
-            kind: kind,
-            anchorIDs: candidate.anchorIDs,
+        guard let event = makeTipTapEvent(
+            anchorReferencePositions: candidate.anchorReferencePositions,
+            tipFirstPosition: candidate.tipTrace.firstPosition,
             timestamp: current.timestamp
-        )
-        return GestureEvent(kind: kind, timestamp: current.timestamp)
-    }
-
-    private mutating func finishTipTapCandidate(current: SessionSnapshot) -> GestureEvent? {
-        guard let candidate = tipTapCandidate else { return nil }
-        guard let anchor = current.contacts.first(where: { $0.identifier == candidate.anchorID }) else { return nil }
-
-        let anchorDuration = candidate.anchorLeadDuration + (current.timestamp - candidate.tipTrace.firstTimestamp)
-        guard candidate.anchorLeadDuration >= GestureRecognizer.Thresholds.anchorLeadTime else { return nil }
-        guard anchorDuration >= GestureRecognizer.Thresholds.anchorMinDuration else { return nil }
-        guard candidate.tipTrace.duration <= GestureRecognizer.Thresholds.tipMaxDuration else { return nil }
-        guard candidate.anchorMaxDistance <= GestureRecognizer.Thresholds.anchorMaxTravel else { return nil }
-        guard candidate.tipTrace.maxDistanceFromStart <= GestureRecognizer.Thresholds.tipMaxTravel else { return nil }
-
-        let anchorDistanceAtFinish = anchor.position.distance(to: candidate.anchorReferencePosition)
-        guard max(candidate.anchorMaxDistance, anchorDistanceAtFinish) <= GestureRecognizer.Thresholds.anchorMaxTravel else {
+        ) else {
             return nil
         }
 
-        let deltaX = candidate.tipTrace.firstPosition.x - candidate.anchorReferencePosition.x
-        guard candidate.anchorReferencePosition.distance(to: candidate.tipTrace.firstPosition)
-            <= GestureRecognizer.Thresholds.tipMaxSeparation else {
-            return nil
-        }
-        guard abs(deltaX) >= GestureRecognizer.Thresholds.tipSideSeparation else { return nil }
-
-        let kind: GestureKind = deltaX < 0 ? .twoFingerTipTapLeft : .twoFingerTipTapRight
+        let kind = event.kind
         if let lastLiveTipTap,
            lastLiveTipTap.kind == kind,
-           lastLiveTipTap.anchorID == candidate.anchorID,
+           Set(lastLiveTipTap.anchorIDs) == Set(candidate.anchorIDs),
            current.timestamp - lastLiveTipTap.timestamp < GestureRecognizer.Thresholds.repeatedTipTapCooldown {
             return nil
         }
 
         lastLiveTipTap = LiveTipTapEmission(
             kind: kind,
-            anchorID: candidate.anchorID,
+            anchorIDs: candidate.anchorIDs,
             timestamp: current.timestamp
         )
-        return GestureEvent(kind: kind, timestamp: current.timestamp)
+        return event
+    }
+
+    private func orderedContactTraces() -> [ContactTrace] {
+        traces.values.sorted { lhs, rhs in
+            if lhs.firstTimestamp == rhs.firstTimestamp {
+                return lhs.id < rhs.id
+            }
+            return lhs.firstTimestamp < rhs.firstTimestamp
+        }
+    }
+
+    private func makeTipTapEvent(
+        anchorReferencePositions: [TouchPoint],
+        tipFirstPosition: TouchPoint,
+        timestamp: TimeInterval
+    ) -> GestureEvent? {
+        let anchorCentroid = centroid(of: anchorReferencePositions)
+        guard anchorCentroid.distance(to: tipFirstPosition) <= GestureRecognizer.Thresholds.tipMaxSeparation else {
+            return nil
+        }
+
+        let deltaX = tipFirstPosition.x - anchorCentroid.x
+        guard let kind = tipTapKind(anchorCount: anchorReferencePositions.count, deltaX: deltaX) else {
+            return nil
+        }
+
+        return GestureEvent(kind: kind, timestamp: timestamp)
+    }
+
+    private func tipTapKind(anchorCount: Int, deltaX: Double) -> GestureKind? {
+        switch anchorCount {
+        case 1:
+            guard abs(deltaX) >= GestureRecognizer.Thresholds.tipSideSeparation else { return nil }
+            return deltaX < 0 ? .twoFingerTipTapLeft : .twoFingerTipTapRight
+        case 2:
+            guard deltaX < -GestureRecognizer.Thresholds.tipSideSeparation else { return nil }
+            return .threeFingerTipTapLeft
+        default:
+            return nil
+        }
+    }
+
+    private func centroid(of points: [TouchPoint]) -> TouchPoint {
+        let sum = points.reduce((x: 0.0, y: 0.0)) { partial, point in
+            (partial.x + point.x, partial.y + point.y)
+        }
+        return TouchPoint(
+            x: sum.x / Double(points.count),
+            y: sum.y / Double(points.count)
+        )
     }
 }
 
 private struct TipTapCandidate {
-    var anchorID: Int
-    var tipID: Int
-    var anchorLeadDuration: TimeInterval
-    var anchorReferencePosition: TouchPoint
-    var anchorMaxDistance: Double
-    var tipTrace: ContactTrace
-}
-
-private struct ThreeFingerTipTapCandidate {
     var anchorIDs: [Int]
     var tipID: Int
     var anchorLeadDuration: TimeInterval
@@ -486,15 +422,9 @@ private struct ThreeFingerTipTapCandidate {
     var tipTrace: ContactTrace
 }
 
-private struct LiveThreeFingerTipTapEmission {
-    var kind: GestureKind
-    var anchorIDs: [Int]
-    var timestamp: TimeInterval
-}
-
 private struct LiveTipTapEmission {
     var kind: GestureKind
-    var anchorID: Int
+    var anchorIDs: [Int]
     var timestamp: TimeInterval
 }
 
