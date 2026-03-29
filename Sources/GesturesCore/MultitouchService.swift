@@ -218,9 +218,13 @@ public final class MultitouchService: @unchecked Sendable {
             }
         }
 
-        if let event = recognizerLock.withLock({ recognizer.process(frame: frame) }) {
-            let (suppressor, handler) = stateLock.withLock { (clickSuppressor, onGesture) }
+        let result = recognizerLock.withLock { recognizer.process(frame: frame) }
+        if result.suppressClicks {
+            let suppressor = stateLock.withLock { clickSuppressor }
             suppressor?.suppress()
+        }
+        if let event = result.event {
+            let handler = stateLock.withLock { onGesture }
             DispatchQueue.main.async {
                 handler?(event)
             }

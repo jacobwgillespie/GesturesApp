@@ -1,5 +1,10 @@
 import Foundation
 
+public struct RecognizerResult {
+    public var event: GestureEvent?
+    public var suppressClicks: Bool
+}
+
 public final class GestureRecognizer {
     fileprivate enum Thresholds {
         static let tapDuration = 0.22
@@ -29,14 +34,15 @@ public final class GestureRecognizer {
         lastEmission = nil
     }
 
-    public func process(frame: TouchFrame) -> GestureEvent? {
+    public func process(frame: TouchFrame) -> RecognizerResult {
         let activeContacts = frame.contacts.filter { $0.phase.isActiveSurfaceContact }
 
         guard !activeContacts.isEmpty else {
             defer { session = nil }
-            guard let session else { return nil }
-            guard !session.didEmitLiveTipTap else { return nil }
-            return emitIfNotDebounced(session.classify())
+            guard let session else { return RecognizerResult(event: nil, suppressClicks: false) }
+            guard !session.didEmitLiveTipTap else { return RecognizerResult(event: nil, suppressClicks: false) }
+            let event = emitIfNotDebounced(session.classify())
+            return RecognizerResult(event: event, suppressClicks: event != nil)
         }
 
         if session == nil {
@@ -44,13 +50,15 @@ public final class GestureRecognizer {
         }
 
         let shouldAttemptTerminalClassification = activeContacts.contains { $0.phase == .breakTouch }
-        return emitIfNotDebounced(
+        let event = emitIfNotDebounced(
             session?.append(
                 timestamp: frame.timestamp,
                 contacts: activeContacts,
                 shouldAttemptTerminalClassification: shouldAttemptTerminalClassification
             )
         )
+        let suppressClicks = event != nil || session?.hasTipTapCandidate == true
+        return RecognizerResult(event: event, suppressClicks: suppressClicks)
     }
 
     private func emitIfNotDebounced(_ event: GestureEvent?) -> GestureEvent? {
@@ -79,6 +87,10 @@ private struct GestureSession {
     private var threeFingerTipTapCandidate: ThreeFingerTipTapCandidate?
     private var lastLiveTipTap: LiveTipTapEmission?
     private var lastLiveThreeFingerTipTap: LiveThreeFingerTipTapEmission?
+
+    var hasTipTapCandidate: Bool {
+        tipTapCandidate != nil || threeFingerTipTapCandidate != nil
+    }
 
     init(startTimestamp: TimeInterval) {
         self.startTimestamp = startTimestamp
