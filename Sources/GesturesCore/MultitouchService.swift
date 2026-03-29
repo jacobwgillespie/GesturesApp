@@ -1,14 +1,5 @@
 import Foundation
 
-private let multitouchCallbackLock = NSLock()
-nonisolated(unsafe) private var activeMultitouchService: MultitouchService?
-
-private let multitouchContactCallback: MTContactFrameCallback = { _, touches, count, timestamp, _ in
-    multitouchCallbackLock.withLock {
-        activeMultitouchService
-    }?.handleCallback(touches: touches, count: count, timestamp: timestamp)
-}
-
 public struct CaptureDiagnostics: Sendable {
     public var frameworkLoaded: Bool
     public var enumeratedDeviceCount: Int
@@ -50,7 +41,7 @@ public final class MultitouchService: @unchecked Sendable {
     private let recognizerLock = NSLock()
     private let recognizer = GestureRecognizer()
     private let framework: MultitouchFramework?
-    private var devices: [MTDeviceRef] = []
+    private var session: MultitouchCaptureSession?
     private var lastPublishedFrameSignature: String?
     private var diagnostics = CaptureDiagnostics()
 
@@ -83,63 +74,37 @@ public final class MultitouchService: @unchecked Sendable {
                 return (false, true)
             }
 
-            multitouchCallbackLock.withLock {
-                activeMultitouchService = self
-            }
+            MultitouchCallbackBridge.shared.install(self)
+            let sessionStart = MultitouchCaptureSession.start(
+                using: framework,
+                callback: MultitouchCallbackBridge.callback
+            )
 
-            var uniquePointers = Set<UInt>()
-            var startedDevices: [MTDeviceRef] = []
-            var registrationAttempts = 0
-            let enumeratedDevices = framework.deviceList()
-
-            for device in enumeratedDevices {
-                let key = UInt(bitPattern: device)
-                guard uniquePointers.insert(key).inserted else { continue }
-                framework.register(device: device, callback: multitouchContactCallback)
-                registrationAttempts += 1
-                framework.start(device: device)
-                startedDevices.append(device)
-            }
-
-            if startedDevices.isEmpty, let defaultDevice = framework.createDefaultDevice() {
-                let key = UInt(bitPattern: defaultDevice)
-                if uniquePointers.insert(key).inserted {
-                    framework.register(device: defaultDevice, callback: multitouchContactCallback)
-                    registrationAttempts += 1
-                    framework.start(device: defaultDevice)
-                    startedDevices.append(defaultDevice)
-                }
-            }
-
-            guard !startedDevices.isEmpty else {
+            guard let session = sessionStart.session else {
                 lastErrorMessage = "No multitouch trackpad device was found."
                 diagnostics = CaptureDiagnostics(
                     frameworkLoaded: true,
-                    enumeratedDeviceCount: enumeratedDevices.count,
+                    enumeratedDeviceCount: sessionStart.enumeratedDeviceCount,
                     startedDeviceCount: 0,
-                    successfulRegistrationCount: registrationAttempts,
+                    successfulRegistrationCount: sessionStart.successfulRegistrationCount,
                     statusSummary: lastErrorMessage ?? "No multitouch device was found."
                 )
-                multitouchCallbackLock.withLock {
-                    if activeMultitouchService === self {
-                        activeMultitouchService = nil
-                    }
-                }
+                MultitouchCallbackBridge.shared.clear(self)
                 return (false, true)
             }
 
-            devices = startedDevices
+            self.session = session
             lastPublishedFrameSignature = nil
             lastErrorMessage = nil
             isRunning = true
             diagnostics = CaptureDiagnostics(
                 frameworkLoaded: true,
-                enumeratedDeviceCount: enumeratedDevices.count,
-                startedDeviceCount: startedDevices.count,
-                successfulRegistrationCount: registrationAttempts,
+                enumeratedDeviceCount: session.enumeratedDeviceCount,
+                startedDeviceCount: session.devices.count,
+                successfulRegistrationCount: session.successfulRegistrationCount,
                 callbackCount: 0,
                 lastCallbackAt: nil,
-                statusSummary: "Started \(startedDevices.count) device(s); waiting for touch callbacks."
+                statusSummary: "Started \(session.devices.count) device(s); waiting for touch callbacks."
             )
             return (true, true)
         }
@@ -154,20 +119,9 @@ public final class MultitouchService: @unchecked Sendable {
         let shouldPublish = stateLock.withLock { () -> Bool in
             guard isRunning else { return false }
             guard let framework else { return false }
-
-            multitouchCallbackLock.withLock {
-                if activeMultitouchService === self {
-                    activeMultitouchService = nil
-                }
-            }
-
-            for device in devices {
-                framework.unregister(device: device, callback: multitouchContactCallback)
-                framework.stop(device: device)
-                framework.release(device: device)
-            }
-
-            devices.removeAll()
+            session?.stop(using: framework, callback: MultitouchCallbackBridge.callback)
+            session = nil
+            MultitouchCallbackBridge.shared.clear(self)
             lastPublishedFrameSignature = nil
             isRunning = false
             recognizerLock.withLock {
@@ -232,6 +186,12 @@ public final class MultitouchService: @unchecked Sendable {
     }
 }
 
+private protocol MultitouchCallbackHandling: AnyObject {
+    func handleCallback(touches: UnsafeMutableRawPointer?, count: Int32, timestamp: Double)
+}
+
+extension MultitouchService: MultitouchCallbackHandling {}
+
 private extension MultitouchService {
     func publishDiagnostics() {
         let handler = stateLock.withLock { onDiagnostics }
@@ -256,5 +216,90 @@ private extension TouchFrame {
                 return "\(contact.identifier):\(contact.phase.rawValue):\(x):\(y)"
             }
             .joined(separator: "|")
+    }
+}
+
+private final class MultitouchCallbackBridge: @unchecked Sendable {
+    static let shared = MultitouchCallbackBridge()
+
+    static let callback: MTContactFrameCallback = { _, touches, count, timestamp, _ in
+        shared.handler?.handleCallback(touches: touches, count: count, timestamp: timestamp)
+    }
+
+    private let lock = NSLock()
+    private weak var activeHandler: MultitouchCallbackHandling?
+
+    var handler: MultitouchCallbackHandling? {
+        lock.withLock { activeHandler }
+    }
+
+    func install(_ handler: MultitouchCallbackHandling) {
+        lock.withLock {
+            activeHandler = handler
+        }
+    }
+
+    func clear(_ handler: MultitouchCallbackHandling) {
+        lock.withLock {
+            guard activeHandler === handler else { return }
+            activeHandler = nil
+        }
+    }
+}
+
+private struct MultitouchCaptureSession {
+    let devices: [MTDeviceRef]
+    let enumeratedDeviceCount: Int
+    let successfulRegistrationCount: Int
+
+    static func start(
+        using framework: MultitouchFramework,
+        callback: MTContactFrameCallback
+    ) -> (session: MultitouchCaptureSession?, enumeratedDeviceCount: Int, successfulRegistrationCount: Int) {
+        var uniquePointers = Set<UInt>()
+        var startedDevices: [MTDeviceRef] = []
+        var registrationAttempts = 0
+        let enumeratedDevices = framework.deviceList()
+
+        for device in enumeratedDevices {
+            let key = UInt(bitPattern: device)
+            guard uniquePointers.insert(key).inserted else { continue }
+            framework.register(device: device, callback: callback)
+            registrationAttempts += 1
+            framework.start(device: device)
+            startedDevices.append(device)
+        }
+
+        if startedDevices.isEmpty, let defaultDevice = framework.createDefaultDevice() {
+            let key = UInt(bitPattern: defaultDevice)
+            if uniquePointers.insert(key).inserted {
+                framework.register(device: defaultDevice, callback: callback)
+                registrationAttempts += 1
+                framework.start(device: defaultDevice)
+                startedDevices.append(defaultDevice)
+            }
+        }
+
+        guard !startedDevices.isEmpty else {
+            return (nil, enumeratedDevices.count, registrationAttempts)
+        }
+
+        return (
+            MultitouchCaptureSession(
+                devices: startedDevices,
+                enumeratedDeviceCount: enumeratedDevices.count,
+                successfulRegistrationCount: registrationAttempts
+            ),
+            enumeratedDevices.count,
+            registrationAttempts
+        )
+    }
+
+    func stop(using framework: MultitouchFramework, callback: MTContactFrameCallback) {
+        for device in devices {
+            framework.unregister(device: device, callback: callback)
+            framework.stop(device: device)
+            framework.release(device: device)
+        }
     }
 }
