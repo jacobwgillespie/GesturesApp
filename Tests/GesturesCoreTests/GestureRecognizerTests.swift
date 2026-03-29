@@ -348,6 +348,123 @@ final class GestureRecognizerTests: XCTestCase {
         ])))
     }
 
+    func testRecognizesThreeFingerTipTapLeft() {
+        let recognizer = GestureRecognizer()
+
+        // Two anchors land
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.00, contacts: [
+            contact(id: 1, x: 0.50, y: 0.48),
+            contact(id: 2, x: 0.65, y: 0.48),
+        ])))
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.04, contacts: [
+            contact(id: 1, x: 0.50, y: 0.48),
+            contact(id: 2, x: 0.65, y: 0.48),
+        ])))
+
+        // Tip taps to the left
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.08, contacts: [
+            contact(id: 1, x: 0.50, y: 0.48),
+            contact(id: 2, x: 0.65, y: 0.48),
+            contact(id: 3, x: 0.35, y: 0.48),
+        ])))
+
+        // Tip lifts, anchors remain
+        let event = recognizer.process(frame: frame(time: 0.14, contacts: [
+            contact(id: 1, x: 0.50, y: 0.48),
+            contact(id: 2, x: 0.65, y: 0.48),
+        ]))
+        XCTAssertEqual(event?.kind, .threeFingerTipTapLeft)
+
+        // No duplicate on session end
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.22, contacts: [])))
+    }
+
+    func testThreeFingerTipTapLeftFallbackWhenAllFingersLift() {
+        let recognizer = GestureRecognizer()
+
+        // Anchors held long enough to exceed tap duration threshold
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.00, contacts: [
+            contact(id: 1, x: 0.50, y: 0.48),
+            contact(id: 2, x: 0.65, y: 0.48),
+        ])))
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.12, contacts: [
+            contact(id: 1, x: 0.50, y: 0.48),
+            contact(id: 2, x: 0.65, y: 0.48),
+        ])))
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.20, contacts: [
+            contact(id: 1, x: 0.50, y: 0.48),
+            contact(id: 2, x: 0.65, y: 0.48),
+            contact(id: 3, x: 0.35, y: 0.48),
+        ])))
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.24, contacts: [
+            contact(id: 1, x: 0.50, y: 0.48),
+            contact(id: 2, x: 0.65, y: 0.48),
+            contact(id: 3, x: 0.35, y: 0.48),
+        ])))
+
+        let event = recognizer.process(frame: frame(time: 0.28, contacts: []))
+        XCTAssertEqual(event?.kind, .threeFingerTipTapLeft)
+    }
+
+    func testRejectsThreeFingerTipTapWhenTipIsOnRight() {
+        let recognizer = GestureRecognizer()
+
+        // Anchors held long enough to exceed tap duration threshold
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.00, contacts: [
+            contact(id: 1, x: 0.30, y: 0.48),
+            contact(id: 2, x: 0.45, y: 0.48),
+        ])))
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.10, contacts: [
+            contact(id: 1, x: 0.30, y: 0.48),
+            contact(id: 2, x: 0.45, y: 0.48),
+        ])))
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.18, contacts: [
+            contact(id: 1, x: 0.30, y: 0.48),
+            contact(id: 2, x: 0.45, y: 0.48),
+            contact(id: 3, x: 0.60, y: 0.48),
+        ])))
+
+        // Tip lifts — should NOT be threeFingerTipTapLeft since tip is to the right
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.24, contacts: [
+            contact(id: 1, x: 0.30, y: 0.48),
+            contact(id: 2, x: 0.45, y: 0.48),
+        ])))
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.32, contacts: [])))
+    }
+
+    func testThreeFingerTipTapLeftCanRepeatWhileAnchorsStayDown() {
+        let recognizer = GestureRecognizer()
+
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.00, contacts: [
+            contact(id: 1, x: 0.50, y: 0.48),
+            contact(id: 2, x: 0.65, y: 0.48),
+        ])))
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.06, contacts: [
+            contact(id: 1, x: 0.50, y: 0.48),
+            contact(id: 2, x: 0.65, y: 0.48),
+            contact(id: 3, x: 0.35, y: 0.48),
+        ])))
+
+        let firstEvent = recognizer.process(frame: frame(time: 0.12, contacts: [
+            contact(id: 1, x: 0.50, y: 0.48),
+            contact(id: 2, x: 0.65, y: 0.48),
+        ]))
+        XCTAssertEqual(firstEvent?.kind, .threeFingerTipTapLeft)
+
+        // Second tap after cooldown
+        XCTAssertNil(recognizer.process(frame: frame(time: 0.28, contacts: [
+            contact(id: 1, x: 0.50, y: 0.48),
+            contact(id: 2, x: 0.65, y: 0.48),
+            contact(id: 4, x: 0.35, y: 0.48),
+        ])))
+
+        let secondEvent = recognizer.process(frame: frame(time: 0.36, contacts: [
+            contact(id: 1, x: 0.50, y: 0.48),
+            contact(id: 2, x: 0.65, y: 0.48),
+        ]))
+        XCTAssertEqual(secondEvent?.kind, .threeFingerTipTapLeft)
+    }
+
     func testRejectsNoisyAmbiguousInput() {
         let recognizer = GestureRecognizer()
 

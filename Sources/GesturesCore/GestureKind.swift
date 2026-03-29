@@ -7,6 +7,7 @@ public enum GestureKind: String, CaseIterable, Codable, Hashable, Identifiable, 
     case threeFingerSwipeDown
     case twoFingerTipTapLeft
     case twoFingerTipTapRight
+    case threeFingerTipTapLeft
 
     public var id: String { rawValue }
 
@@ -20,6 +21,8 @@ public enum GestureKind: String, CaseIterable, Codable, Hashable, Identifiable, 
             "Two-Finger Tip-Tap Left"
         case .twoFingerTipTapRight:
             "Two-Finger Tip-Tap Right"
+        case .threeFingerTipTapLeft:
+            "Three-Finger Tip-Tap Left"
         }
     }
 
@@ -33,6 +36,8 @@ public enum GestureKind: String, CaseIterable, Codable, Hashable, Identifiable, 
             "One finger anchors while the second finger taps on its left side."
         case .twoFingerTipTapRight:
             "One finger anchors while the second finger taps on its right side."
+        case .threeFingerTipTapLeft:
+            "Two fingers anchor while a third finger taps on their left side."
         }
     }
 
@@ -46,6 +51,8 @@ public enum GestureKind: String, CaseIterable, Codable, Hashable, Identifiable, 
             ShortcutBinding(keyCode: UInt16(kVK_LeftArrow), modifierFlags: [.command, .option])
         case .twoFingerTipTapRight:
             ShortcutBinding(keyCode: UInt16(kVK_RightArrow), modifierFlags: [.command, .option])
+        case .threeFingerTipTapLeft:
+            ShortcutBinding(keyCode: UInt16(kVK_ANSI_R), modifierFlags: [.command])
         }
     }
 
@@ -67,6 +74,11 @@ public enum GestureKind: String, CaseIterable, Codable, Hashable, Identifiable, 
                 shortcut: defaultShortcutBinding
             )
         case .twoFingerTipTapRight:
+            GestureBindingConfiguration(
+                isEnabled: true,
+                shortcut: defaultShortcutBinding
+            )
+        case .threeFingerTipTapLeft:
             GestureBindingConfiguration(
                 isEnabled: true,
                 shortcut: defaultShortcutBinding
