@@ -3,16 +3,6 @@ import Foundation
 import GesturesCore
 import ServiceManagement
 
-struct CaptureDiagnosticsViewState {
-    var frameworkLoaded = false
-    var enumeratedDeviceCount = 0
-    var startedDeviceCount = 0
-    var successfulRegistrationCount = 0
-    var callbackCount = 0
-    var lastCallbackAt: Date?
-    var statusSummary = "Capture has not started."
-}
-
 struct DetectedGestureEntry: Identifiable {
     let id = UUID()
     let kind: GestureKind
@@ -67,7 +57,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var lastGesture: GestureEvent?
     @Published private(set) var lastGestureObservedAt: Date?
     @Published private(set) var recentDetections: [DetectedGestureEntry] = []
-    @Published private(set) var captureDiagnostics = CaptureDiagnosticsViewState()
+    @Published private(set) var captureDiagnostics = CaptureDiagnostics()
     @Published private(set) var debugLogPath: String
 
     let store = GestureBindingStore()
@@ -115,19 +105,10 @@ final class AppModel: ObservableObject {
         }
         service.onDiagnostics = { [weak self] diagnostics in
             Task { @MainActor [weak self] in
-                let state = CaptureDiagnosticsViewState(
-                    frameworkLoaded: diagnostics.frameworkLoaded,
-                    enumeratedDeviceCount: diagnostics.enumeratedDeviceCount,
-                    startedDeviceCount: diagnostics.startedDeviceCount,
-                    successfulRegistrationCount: diagnostics.successfulRegistrationCount,
-                    callbackCount: diagnostics.callbackCount,
-                    lastCallbackAt: diagnostics.lastCallbackAt,
-                    statusSummary: diagnostics.statusSummary
-                )
                 guard let self else { return }
                 guard self.isDebugModeEnabled else { return }
-                self.captureDiagnostics = state
-                self.logDiagnostics(state)
+                self.captureDiagnostics = diagnostics
+                self.logDiagnostics(diagnostics)
             }
         }
     }
@@ -343,7 +324,7 @@ final class AppModel: ObservableObject {
         debugLogWriter.append("Frame: \(summary)")
     }
 
-    private func logDiagnostics(_ diagnostics: CaptureDiagnosticsViewState) {
+    private func logDiagnostics(_ diagnostics: CaptureDiagnostics) {
         guard isDebugModeEnabled else { return }
         debugLogWriter.append(
             """
@@ -374,7 +355,7 @@ final class AppModel: ObservableObject {
         lastGesture = nil
         lastGestureObservedAt = nil
         recentDetections = []
-        captureDiagnostics = CaptureDiagnosticsViewState()
+        captureDiagnostics = CaptureDiagnostics()
     }
 
     func showAboutPanel() {
