@@ -3,7 +3,6 @@ import SwiftUI
 struct GesturesCommands: Commands {
     @ObservedObject var model: AppModel
     @Environment(\.openSettings) private var openSettings
-    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
@@ -20,13 +19,6 @@ struct GesturesCommands: Commands {
         }
 
         CommandMenu("Gestures") {
-            Button("Troubleshooting…") {
-                AppNavigation.openTroubleshooting(using: openWindow)
-            }
-            .keyboardShortcut("?", modifiers: [.command, .shift])
-
-            Divider()
-
             Button("Restart Capture") {
                 model.restartCapture()
             }

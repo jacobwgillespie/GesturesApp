@@ -24,11 +24,5 @@ struct GesturesApp: App {
             SettingsView(model: model)
         }
         .windowResizability(.contentSize)
-
-        Window("Troubleshooting", id: AppWindowID.troubleshooting) {
-            TroubleshootingView(model: model)
-        }
-        .defaultSize(width: 720, height: 620)
-        .windowResizability(.contentMinSize)
     }
 }

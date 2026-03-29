@@ -3,7 +3,6 @@ import SwiftUI
 struct MenuBarContentView: View {
     @ObservedObject var model: AppModel
     @Environment(\.openSettings) private var openSettings
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
@@ -38,12 +37,6 @@ struct MenuBarContentView: View {
             RestartCaptureButton(model: model)
 
             Divider()
-
-            Button {
-                AppNavigation.openTroubleshooting(using: openWindow)
-            } label: {
-                Label("Troubleshooting\u{2026}", systemImage: "stethoscope")
-            }
 
             Button {
                 model.showAboutPanel()

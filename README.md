@@ -1,6 +1,6 @@
 # Gestures
 
-Minimal macOS menu bar utility that maps trackpad gestures to keyboard shortcuts.
+macOS menu bar app that maps trackpad gestures to keyboard shortcuts.
 
 ## Supported Gestures
 
@@ -12,7 +12,7 @@ Minimal macOS menu bar utility that maps trackpad gestures to keyboard shortcuts
 | Two-Finger Tip-Tap Right  | One finger anchors while a second taps to its right      | Opt+Cmd+Right  |
 | Three-Finger Tip-Tap Left | Two fingers anchor while a third taps on their left side | Cmd+R          |
 
-Each gesture can be enabled/disabled, remapped to a keyboard shortcut or middle click, and has an optional haptic feedback toggle.
+Each gesture can be enabled or disabled, remapped to a keyboard shortcut or middle click, and configured with optional haptic feedback.
 
 ## Features
 
@@ -21,7 +21,7 @@ Each gesture can be enabled/disabled, remapped to a keyboard shortcut or middle 
 - Per-gesture haptic feedback
 - Launch at login
 - Click suppression during gesture recognition
-- Debug logging and troubleshooting window
+- Debug logging
 
 ## Requirements
 
@@ -34,7 +34,7 @@ Each gesture can be enabled/disabled, remapped to a keyboard shortcut or middle 
 scripts/install-app.sh
 ```
 
-This builds the app with SwiftPM, creates a signed `.app` bundle, and installs it to `~/Applications`. The installer verifies the bundle after installation (`Info.plist` validation and `codesign --verify`).
+This builds the app with SwiftPM, creates a signed `.app` bundle, installs it to `~/Applications`, and verifies the result.
 
 Options:
 
@@ -52,6 +52,28 @@ INSTALL_DIR           Install destination
 CONFIGURATION         debug or release
 SIGNING_IDENTITY      Code signing identity (default: auto-detect, falls back to ad-hoc)
 ```
+
+## Getting Started
+
+1. Install the app with `scripts/install-app.sh`.
+2. Launch `Gestures.app` from `~/Applications`.
+3. Open the menu bar item and grant Accessibility access when prompted.
+4. Confirm that the status reads `Capture Running`.
+5. Open `Settings…` to change gesture mappings or enable haptic feedback.
+
+## Using the App
+
+- The menu bar item shows capture status and Accessibility status.
+- `Settings → General` contains status, Accessibility controls, and launch-at-login.
+- `Settings → Gestures` contains per-gesture settings.
+- `Settings → Advanced` contains debug mode and log access.
+
+## Troubleshooting
+
+- If gestures do not trigger actions, confirm that Accessibility access is granted and then use `Restart Capture`.
+- If the menu bar item says capture is stopped, use `Restart Capture` and recheck Accessibility status in `Settings → General`.
+- If gesture detection seems inconsistent, enable debug mode in `Settings → Advanced`, reproduce the issue, and inspect the log at `~/Library/Application Support/Gestures/Logs/debug.log`.
+- Launch at login is only available in the bundled `.app` build, not when running the executable directly through `swift run`.
 
 ## Development
 

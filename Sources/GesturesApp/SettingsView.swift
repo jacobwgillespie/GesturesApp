@@ -10,7 +10,6 @@ private enum SettingsPane: Hashable {
 struct SettingsView: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var store: GestureBindingStore
-    @Environment(\.openWindow) private var openWindow
 
     @State private var selectedPane: SettingsPane = .general
     @State private var showsResetDefaultsConfirmation = false
@@ -99,6 +98,21 @@ struct SettingsView: View {
     private var generalTab: some View {
         Form {
             Section {
+                LabeledContent("Capture") {
+                    Label(
+                        model.isCaptureRunning ? "Running" : "Stopped",
+                        systemImage: model.isCaptureRunning ? "wave.3.right.circle.fill" : "pause.circle"
+                    )
+                    .foregroundStyle(model.isCaptureRunning ? .green : .primary)
+                }
+
+                Text(model.captureMessage)
+                    .foregroundStyle(.secondary)
+
+                RestartCaptureButton(model: model)
+            }
+
+            Section {
                 LabeledContent("Accessibility") {
                     Label(
                         model.isAccessibilityTrusted ? "Granted" : "Required",
@@ -110,8 +124,6 @@ struct SettingsView: View {
                 HStack(spacing: 8) {
                     AccessibilityActionButtons(model: model, showRefreshButton: true)
                 }
-            } header: {
-                Text("Accessibility")
             }
 
             Section {
@@ -127,7 +139,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .scrollDisabled(true)
+        .scrollDisabled(false)
         .frame(width: 500)
     }
 
@@ -212,10 +224,6 @@ struct SettingsView: View {
             }
 
             Section {
-                Button("Open Troubleshooting\u{2026}") {
-                    AppNavigation.openTroubleshooting(using: openWindow)
-                }
-
                 if model.isDebugModeEnabled {
                     Button("Open Debug Log") {
                         model.openDebugLog()
