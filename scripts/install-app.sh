@@ -3,9 +3,19 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-APP_NAME="Gestures"
-EXECUTABLE_NAME="GesturesApp"
-BUNDLE_ID="${BUNDLE_ID:-com.jacobwgillespie.gestures}"
+METADATA_FILE="$ROOT_DIR/packaging-metadata.json"
+
+read_metadata() {
+  /usr/bin/plutil -extract "$1" raw -o - "$METADATA_FILE"
+}
+
+APP_NAME="$(read_metadata appBundleName)"
+EXECUTABLE_NAME="$(read_metadata executableProductName)"
+DEFAULT_BUNDLE_ID="$(read_metadata bundleIdentifier)"
+MINIMUM_SYSTEM_VERSION="$(read_metadata minimumMacOSVersion)"
+DEFAULT_MARKETING_VERSION="$(read_metadata marketingVersion)"
+
+BUNDLE_ID="${BUNDLE_ID:-$DEFAULT_BUNDLE_ID}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/Applications}"
 CONFIGURATION="${CONFIGURATION:-release}"
 BUILD_FLAGS=()
@@ -90,7 +100,7 @@ RESOURCES_DIR="$CONTENTS_DIR/Resources"
 INFO_PLIST="$CONTENTS_DIR/Info.plist"
 PKGINFO_PATH="$CONTENTS_DIR/PkgInfo"
 INSTALLED_APP_DIR="$INSTALL_DIR/${APP_NAME}.app"
-SHORT_VERSION="${MARKETING_VERSION:-0.1.0}"
+SHORT_VERSION="${MARKETING_VERSION:-$DEFAULT_MARKETING_VERSION}"
 BUILD_VERSION="${CURRENT_PROJECT_VERSION:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
 
 echo "Creating app bundle..."
@@ -124,7 +134,7 @@ cat > "$INFO_PLIST" <<EOF
   <key>CFBundleIconFile</key>
   <string>AppIcon</string>
   <key>LSMinimumSystemVersion</key>
-  <string>26.0</string>
+  <string>${MINIMUM_SYSTEM_VERSION}</string>
   <key>LSUIElement</key>
   <true/>
   <key>NSHighResolutionCapable</key>
@@ -179,6 +189,8 @@ mkdir -p "$INSTALL_DIR"
 echo "Installing to $INSTALLED_APP_DIR..."
 rm -rf "$INSTALLED_APP_DIR"
 ditto "$APP_DIR" "$INSTALLED_APP_DIR"
+
+zsh "$ROOT_DIR/scripts/verify-app.sh" "$INSTALLED_APP_DIR"
 
 echo "Installed ${APP_NAME}.app"
 echo "App bundle: $INSTALLED_APP_DIR"

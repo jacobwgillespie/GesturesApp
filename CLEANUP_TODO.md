@@ -8,4 +8,4 @@
 - [x] Refactor `GestureRecognizer` to extract shared tip-tap machinery.
 - [x] Encapsulate `MultitouchService` callback and device-session state.
 - [x] Reduce platform coupling and dead surface in core models where practical.
-- [ ] Centralize packaging metadata and add installer smoke verification.
+- [x] Centralize packaging metadata and add installer smoke verification.

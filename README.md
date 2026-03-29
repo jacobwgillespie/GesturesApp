@@ -26,6 +26,7 @@ scripts/install-app.sh
 ```
 
 This builds the app with SwiftPM, creates a signed `.app` bundle, and installs it to `~/Applications`.
+The installer now runs a bundle smoke check after installation, including `Info.plist` validation and `codesign --verify`.
 
 Options:
 

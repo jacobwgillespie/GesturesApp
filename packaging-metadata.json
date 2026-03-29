@@ -1,0 +1,12 @@
+{
+  "packageName": "gestures",
+  "libraryProductName": "GesturesCore",
+  "executableProductName": "GesturesApp",
+  "coreTargetName": "GesturesCore",
+  "appTargetName": "GesturesApp",
+  "testTargetName": "GesturesCoreTests",
+  "appBundleName": "Gestures",
+  "bundleIdentifier": "com.jacobwgillespie.gestures",
+  "minimumMacOSVersion": "26.0",
+  "marketingVersion": "0.1.0"
+}
