@@ -136,6 +136,23 @@ public final class MultitouchService: @unchecked Sendable {
         }
     }
 
+    public func availableDeviceCount() -> Int {
+        stateLock.withLock {
+            guard let framework else { return 0 }
+
+            let uniqueEnumeratedDevices = Set(framework.deviceList().map { UInt(bitPattern: $0) })
+            if !uniqueEnumeratedDevices.isEmpty {
+                return uniqueEnumeratedDevices.count
+            }
+
+            guard let defaultDevice = framework.createDefaultDevice() else {
+                return 0
+            }
+            framework.release(device: defaultDevice)
+            return 1
+        }
+    }
+
     fileprivate func handleCallback(touches: UnsafeMutableRawPointer?, count: Int32, timestamp: Double) {
         let rawTouches: [MTRawTouch]
         if let touches, count > 0 {

@@ -69,6 +69,8 @@ final class AppModel: ObservableObject {
     private let launchAtLoginController: LaunchAtLoginController
     private let debugLog: DebugLogActions
     private let userDefaults: UserDefaults
+    private var trackpadAvailabilityTimer: Timer?
+    private var lastAvailableTrackpadCount = 0
     private var hasBootstrapped = false
 
     private init(
@@ -123,7 +125,9 @@ final class AppModel: ObservableObject {
         debugLog.append("Application bootstrapping")
         refreshAccessibilityStatus()
         refreshLaunchAtLoginStatus()
+        lastAvailableTrackpadCount = service.availableDeviceCount()
         restartCapture()
+        startTrackpadAvailabilityMonitoring()
     }
 
     func refreshAccessibilityStatus() {
@@ -143,9 +147,13 @@ final class AppModel: ObservableObject {
     }
 
     func restartCapture() {
+        restartCapture(reason: "manual request")
+    }
+
+    private func restartCapture(reason: String) {
         captureMessage = "Starting capture…"
         isCaptureRunning = false
-        debugLog.append("Restarting capture")
+        debugLog.append("Restarting capture (\(reason))")
         service.stop()
         clickSuppressor.start()
         let started = service.start()
@@ -342,6 +350,34 @@ final class AppModel: ObservableObject {
 
     var supportsLaunchAtLogin: Bool {
         launchAtLoginController.isSupported
+    }
+
+    private func startTrackpadAvailabilityMonitoring() {
+        trackpadAvailabilityTimer?.invalidate()
+        trackpadAvailabilityTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshTrackpadAvailability()
+            }
+        }
+    }
+
+    private func refreshTrackpadAvailability() {
+        let availableTrackpadCount = service.availableDeviceCount()
+        guard availableTrackpadCount != lastAvailableTrackpadCount else { return }
+
+        let previousTrackpadCount = lastAvailableTrackpadCount
+        lastAvailableTrackpadCount = availableTrackpadCount
+        debugLog.append(
+            "Trackpad availability changed: \(previousTrackpadCount) -> \(availableTrackpadCount)"
+        )
+
+        let shouldRestartCapture = availableTrackpadCount > previousTrackpadCount
+            || (!isCaptureRunning && availableTrackpadCount > 0)
+        guard shouldRestartCapture else { return }
+
+        restartCapture(
+            reason: "trackpad availability changed from \(previousTrackpadCount) to \(availableTrackpadCount)"
+        )
     }
 }
 
