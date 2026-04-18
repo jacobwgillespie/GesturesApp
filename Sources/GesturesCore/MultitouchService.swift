@@ -28,6 +28,20 @@ public struct CaptureDiagnostics: Sendable {
     }
 }
 
+public struct AvailableTrackpadSnapshot: Equatable, Sendable {
+    public let identifiers: [UInt]
+    public let isUsingDefaultDeviceFallback: Bool
+
+    public init(identifiers: [UInt] = [], isUsingDefaultDeviceFallback: Bool = false) {
+        self.identifiers = identifiers.sorted()
+        self.isUsingDefaultDeviceFallback = isUsingDefaultDeviceFallback
+    }
+
+    public var count: Int {
+        identifiers.isEmpty && isUsingDefaultDeviceFallback ? 1 : identifiers.count
+    }
+}
+
 public final class MultitouchService: @unchecked Sendable {
     public var onGesture: (@Sendable (GestureEvent) -> Void)?
     public var onFrame: (@Sendable (TouchFrame) -> Void)?
@@ -136,20 +150,20 @@ public final class MultitouchService: @unchecked Sendable {
         }
     }
 
-    public func availableDeviceCount() -> Int {
+    public func availableTrackpadSnapshot() -> AvailableTrackpadSnapshot {
         stateLock.withLock {
-            guard let framework else { return 0 }
+            guard let framework else { return AvailableTrackpadSnapshot() }
 
-            let uniqueEnumeratedDevices = Set(framework.deviceList().map { UInt(bitPattern: $0) })
+            let uniqueEnumeratedDevices = Array(Set(framework.deviceList().map { UInt(bitPattern: $0) })).sorted()
             if !uniqueEnumeratedDevices.isEmpty {
-                return uniqueEnumeratedDevices.count
+                return AvailableTrackpadSnapshot(identifiers: uniqueEnumeratedDevices)
             }
 
             guard let defaultDevice = framework.createDefaultDevice() else {
-                return 0
+                return AvailableTrackpadSnapshot()
             }
             framework.release(device: defaultDevice)
-            return 1
+            return AvailableTrackpadSnapshot(isUsingDefaultDeviceFallback: true)
         }
     }
 

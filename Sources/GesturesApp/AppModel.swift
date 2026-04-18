@@ -70,7 +70,7 @@ final class AppModel: ObservableObject {
     private let debugLog: DebugLogActions
     private let userDefaults: UserDefaults
     private var trackpadAvailabilityTimer: Timer?
-    private var lastAvailableTrackpadCount = 0
+    private var lastAvailableTrackpadSnapshot = AvailableTrackpadSnapshot()
     private var hasBootstrapped = false
 
     private init(
@@ -125,7 +125,7 @@ final class AppModel: ObservableObject {
         debugLog.append("Application bootstrapping")
         refreshAccessibilityStatus()
         refreshLaunchAtLoginStatus()
-        lastAvailableTrackpadCount = service.availableDeviceCount()
+        lastAvailableTrackpadSnapshot = service.availableTrackpadSnapshot()
         restartCapture()
         startTrackpadAvailabilityMonitoring()
     }
@@ -362,22 +362,32 @@ final class AppModel: ObservableObject {
     }
 
     private func refreshTrackpadAvailability() {
-        let availableTrackpadCount = service.availableDeviceCount()
-        guard availableTrackpadCount != lastAvailableTrackpadCount else { return }
+        let availableTrackpadSnapshot = service.availableTrackpadSnapshot()
+        guard availableTrackpadSnapshot != lastAvailableTrackpadSnapshot else { return }
 
-        let previousTrackpadCount = lastAvailableTrackpadCount
-        lastAvailableTrackpadCount = availableTrackpadCount
+        let previousTrackpadSnapshot = lastAvailableTrackpadSnapshot
+        lastAvailableTrackpadSnapshot = availableTrackpadSnapshot
         debugLog.append(
-            "Trackpad availability changed: \(previousTrackpadCount) -> \(availableTrackpadCount)"
+            """
+            Trackpad availability changed: \(describe(previousTrackpadSnapshot)) \
+            -> \(describe(availableTrackpadSnapshot))
+            """
         )
 
-        let shouldRestartCapture = availableTrackpadCount > previousTrackpadCount
-            || (!isCaptureRunning && availableTrackpadCount > 0)
+        let shouldRestartCapture = availableTrackpadSnapshot.count > 0
         guard shouldRestartCapture else { return }
 
         restartCapture(
-            reason: "trackpad availability changed from \(previousTrackpadCount) to \(availableTrackpadCount)"
+            reason: "trackpad availability changed from \(describe(previousTrackpadSnapshot)) to \(describe(availableTrackpadSnapshot))"
         )
+    }
+
+    private func describe(_ snapshot: AvailableTrackpadSnapshot) -> String {
+        let identifiers = snapshot.identifiers.map(String.init).joined(separator: ",")
+        if snapshot.isUsingDefaultDeviceFallback {
+            return "count=\(snapshot.count) ids=[\(identifiers)] fallback=default"
+        }
+        return "count=\(snapshot.count) ids=[\(identifiers)]"
     }
 }
 
