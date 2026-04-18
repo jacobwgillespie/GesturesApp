@@ -1,8 +1,32 @@
 import AppKit
 import SwiftUI
 
+final class GesturesAppDelegate: NSObject, NSApplicationDelegate {
+    private var hasHandledFirstActivation = false
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        Task { @MainActor in
+            AppNavigation.openSettings()
+        }
+
+        return false
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        guard hasHandledFirstActivation else {
+            hasHandledFirstActivation = true
+            return
+        }
+
+        Task { @MainActor in
+            AppNavigation.openSettings()
+        }
+    }
+}
+
 @main
 struct GesturesApp: App {
+    @NSApplicationDelegateAdaptor(GesturesAppDelegate.self) private var appDelegate
     @StateObject private var model = AppModel.shared
 
     init() {

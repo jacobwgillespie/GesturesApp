@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import GesturesCore
 import ServiceManagement
+import SwiftUI
 
 struct AccessibilityAccessController {
     func refreshStatus() -> Bool {
@@ -92,6 +93,24 @@ struct DebugLogActions {
     func copyLogPath() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(logFilePath, forType: .string)
+    }
+}
+
+@MainActor
+final class SettingsSceneBridge {
+    static let shared = SettingsSceneBridge()
+
+    private var action: OpenSettingsAction?
+
+    func register(_ action: OpenSettingsAction) {
+        self.action = action
+    }
+
+    @discardableResult
+    func open() -> Bool {
+        guard let action else { return false }
+        action()
+        return true
     }
 }
 

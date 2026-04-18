@@ -2,12 +2,11 @@ import SwiftUI
 
 struct MenuBarContentView: View {
     @ObservedObject var model: AppModel
-    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         Group {
             Button {
-                AppNavigation.openSettings(using: openSettings)
+                AppNavigation.openSettings()
             } label: {
                 Label("Settings\u{2026}", systemImage: "gearshape")
             }

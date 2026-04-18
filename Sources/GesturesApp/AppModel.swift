@@ -69,9 +69,11 @@ final class AppModel: ObservableObject {
     private let launchAtLoginController: LaunchAtLoginController
     private let debugLog: DebugLogActions
     private let userDefaults: UserDefaults
+    private let captureControlQueue = DispatchQueue(label: "com.jacobwgillespie.gestures.capture-control")
     private var trackpadAvailabilityTimer: Timer?
     private var lastAvailableTrackpadSnapshot = AvailableTrackpadSnapshot()
     private var hasBootstrapped = false
+    private var captureRestartGeneration = 0
 
     private init(
         dispatcher: ShortcutDispatching? = nil,
@@ -151,17 +153,27 @@ final class AppModel: ObservableObject {
     }
 
     private func restartCapture(reason: String) {
+        captureRestartGeneration += 1
+        let generation = captureRestartGeneration
         captureMessage = "Starting capture…"
         isCaptureRunning = false
         debugLog.append("Restarting capture (\(reason))")
-        service.stop()
         clickSuppressor.start()
-        let started = service.start()
-        isCaptureRunning = started
-        captureMessage = started
-            ? "Capture is running for available trackpads."
-            : (service.lastErrorMessage ?? "Capture could not be started.")
-        debugLog.append("Capture start result: \(captureMessage)")
+        let service = self.service
+        captureControlQueue.async { [service] in
+            service.stop()
+            let started = service.start()
+            let message = started
+                ? "Capture is running for available trackpads."
+                : (service.lastErrorMessage ?? "Capture could not be started.")
+
+            Task { @MainActor [weak self] in
+                guard let self, self.captureRestartGeneration == generation else { return }
+                self.isCaptureRunning = started
+                self.captureMessage = message
+                self.debugLog.append("Capture start result: \(message)")
+            }
+        }
     }
 
     func resetDefaults() {
@@ -374,11 +386,11 @@ final class AppModel: ObservableObject {
             """
         )
 
-        let shouldRestartCapture = availableTrackpadSnapshot.count > 0
+        let shouldRestartCapture = availableTrackpadSnapshot.count > 0 && !isCaptureRunning
         guard shouldRestartCapture else { return }
 
         restartCapture(
-            reason: "trackpad availability changed from \(describe(previousTrackpadSnapshot)) to \(describe(availableTrackpadSnapshot))"
+            reason: "trackpad became available: \(describe(previousTrackpadSnapshot)) -> \(describe(availableTrackpadSnapshot))"
         )
     }
 

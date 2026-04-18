@@ -13,7 +13,6 @@ struct SettingsView: View {
 
     @State private var selectedPane: SettingsPane = .general
     @State private var showsResetDefaultsConfirmation = false
-    @State private var tabContentHeight: CGFloat = 200
 
     init(model: AppModel) {
         self.model = model
@@ -34,15 +33,7 @@ struct SettingsView: View {
                 advancedTab
             }
         }
-        .frame(width: 500, height: tabContentHeight)
-        .onAppear {
-            AppNavigation.activate()
-            measureAndResize(animated: false)
-        }
-        .onChange(of: selectedPane) { _, _ in measureAndResize(animated: true) }
-        .onChange(of: model.isDebugModeEnabled) { _, _ in
-            measureAndResize(animated: true)
-        }
+        .frame(width: 520, height: 480)
         .alert(
             "Reset All Gesture Defaults?",
             isPresented: $showsResetDefaultsConfirmation
@@ -70,29 +61,6 @@ struct SettingsView: View {
             }
         } message: {
             Text(model.launchAtLoginErrorMessage ?? "")
-        }
-    }
-
-    // MARK: - Tab sizing
-
-    private func measureAndResize(animated: Bool) {
-        let content: AnyView
-        switch selectedPane {
-        case .general: content = AnyView(generalTab)
-        case .gestures: content = AnyView(gesturesTab)
-        case .advanced: content = AnyView(advancedTab)
-        }
-
-        let sizing = NSHostingController(rootView: content)
-        sizing.sizingOptions = .intrinsicContentSize
-        let ideal = sizing.view.fittingSize
-
-        if animated {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                tabContentHeight = ideal.height
-            }
-        } else {
-            tabContentHeight = ideal.height
         }
     }
 
@@ -142,8 +110,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .scrollDisabled(false)
-        .frame(width: 500)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     // MARK: - Gestures
@@ -197,8 +164,6 @@ struct SettingsView: View {
                 }
             }
             .formStyle(.grouped)
-            .scrollDisabled(true)
-            .fixedSize(horizontal: false, vertical: true)
 
             HStack {
                 Spacer()
@@ -209,8 +174,7 @@ struct SettingsView: View {
             .padding(.horizontal, 20)
             .padding(.bottom, 16)
         }
-        .frame(width: 500)
-        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     // MARK: - Advanced
@@ -239,7 +203,6 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .scrollDisabled(true)
-        .frame(width: 500)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }

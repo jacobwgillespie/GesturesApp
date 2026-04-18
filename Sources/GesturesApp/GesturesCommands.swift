@@ -5,6 +5,8 @@ struct GesturesCommands: Commands {
     @Environment(\.openSettings) private var openSettings
 
     var body: some Commands {
+        let _ = SettingsSceneBridge.shared.register(openSettings)
+
         CommandGroup(replacing: .appInfo) {
             Button("About Gestures") {
                 model.showAboutPanel()
@@ -13,7 +15,7 @@ struct GesturesCommands: Commands {
 
         CommandGroup(replacing: .appSettings) {
             Button("Settings…") {
-                AppNavigation.openSettings(using: openSettings)
+                AppNavigation.openSettings()
             }
             .keyboardShortcut(",", modifiers: .command)
         }
