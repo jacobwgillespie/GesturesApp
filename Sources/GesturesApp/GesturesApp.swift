@@ -3,6 +3,7 @@ import SwiftUI
 
 final class GesturesAppDelegate: NSObject, NSApplicationDelegate {
     private var hasHandledFirstActivation = false
+    private var statusItemController: StatusItemController?
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         Task { @MainActor in
@@ -22,6 +23,13 @@ final class GesturesAppDelegate: NSObject, NSApplicationDelegate {
             AppNavigation.openSettings()
         }
     }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        Task { @MainActor in
+            statusItemController = StatusItemController(model: AppModel.shared)
+            AppModel.shared.bootstrap()
+        }
+    }
 }
 
 @main
@@ -31,19 +39,9 @@ struct GesturesApp: App {
 
     init() {
         NSApplication.shared.setActivationPolicy(.accessory)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            AppModel.shared.bootstrap()
-        }
     }
 
     var body: some Scene {
-        MenuBarExtra("Gestures", systemImage: "hand.tap.fill") {
-            MenuBarContentView(model: model)
-        }
-        .commands {
-            GesturesCommands(model: model)
-        }
-
         Settings {
             SettingsView(model: model)
         }

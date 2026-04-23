@@ -52,6 +52,7 @@ public final class MultitouchService: @unchecked Sendable {
     public private(set) var isRunning = false
 
     private let stateLock = NSLock()
+    private let frameworkLock = NSLock()
     private let recognizerLock = NSLock()
     private let recognizer = GestureRecognizer()
     private let framework: MultitouchFramework?
@@ -73,13 +74,16 @@ public final class MultitouchService: @unchecked Sendable {
 
     @discardableResult
     public func start() -> Bool {
-        let result = stateLock.withLock { () -> (Bool, Bool) in
-            guard !isRunning else { return (true, false) }
-            recognizerLock.withLock {
-                recognizer.reset()
-            }
+        let startState = stateLock.withLock { () -> (alreadyRunning: Bool, framework: MultitouchFramework?) in
+            (isRunning, framework)
+        }
 
-            guard let framework else {
+        if startState.alreadyRunning {
+            return true
+        }
+
+        guard let framework = startState.framework else {
+            let result = stateLock.withLock { () -> (Bool, Bool) in
                 lastErrorMessage = "The private MultitouchSupport framework could not be loaded."
                 diagnostics = CaptureDiagnostics(
                     frameworkLoaded: false,
@@ -88,11 +92,24 @@ public final class MultitouchService: @unchecked Sendable {
                 return (false, true)
             }
 
-            MultitouchCallbackBridge.shared.install(self)
-            let sessionStart = MultitouchCaptureSession.start(
+            publishDiagnostics()
+            return result.0
+        }
+
+        recognizerLock.withLock {
+            recognizer.reset()
+        }
+
+        MultitouchCallbackBridge.shared.install(self)
+        let sessionStart = frameworkLock.withLock {
+            MultitouchCaptureSession.start(
                 using: framework,
                 callback: MultitouchCallbackBridge.callback
             )
+        }
+
+        let result = stateLock.withLock { () -> (Bool, Bool) in
+            guard !isRunning else { return (true, false) }
 
             guard let session = sessionStart.session else {
                 lastErrorMessage = "No multitouch trackpad device was found."
@@ -103,7 +120,6 @@ public final class MultitouchService: @unchecked Sendable {
                     successfulRegistrationCount: sessionStart.successfulRegistrationCount,
                     statusSummary: lastErrorMessage ?? "No multitouch device was found."
                 )
-                MultitouchCallbackBridge.shared.clear(self)
                 return (false, true)
             }
 
@@ -123,6 +139,10 @@ public final class MultitouchService: @unchecked Sendable {
             return (true, true)
         }
 
+        if !result.0 {
+            MultitouchCallbackBridge.shared.clear(self)
+        }
+
         if result.1 {
             publishDiagnostics()
         }
@@ -130,11 +150,11 @@ public final class MultitouchService: @unchecked Sendable {
     }
 
     public func stop() {
-        let shouldPublish = stateLock.withLock { () -> Bool in
-            guard isRunning else { return false }
-            guard let framework else { return false }
-            session?.stop(using: framework, callback: MultitouchCallbackBridge.callback)
-            session = nil
+        let stopState = stateLock.withLock { () -> (MultitouchFramework?, MultitouchCaptureSession?, Bool) in
+            guard isRunning else { return (nil, nil, false) }
+            let framework = self.framework
+            let session = self.session
+            self.session = nil
             MultitouchCallbackBridge.shared.clear(self)
             lastPublishedFrameSignature = nil
             isRunning = false
@@ -142,19 +162,34 @@ public final class MultitouchService: @unchecked Sendable {
                 recognizer.reset()
             }
             diagnostics.statusSummary = "Capture stopped."
-            return true
+            return (framework, session, true)
         }
 
-        if shouldPublish {
+        if stopState.2, let framework = stopState.0, let session = stopState.1 {
+            frameworkLock.withLock {
+                session.stop(using: framework, callback: MultitouchCallbackBridge.callback)
+            }
+        }
+
+        if stopState.2 {
             publishDiagnostics()
         }
     }
 
     public func availableTrackpadSnapshot() -> AvailableTrackpadSnapshot {
-        stateLock.withLock {
+        frameworkLock.withLock {
             guard let framework else { return AvailableTrackpadSnapshot() }
 
-            let uniqueEnumeratedDevices = Array(Set(framework.deviceList().map { UInt(bitPattern: $0) })).sorted()
+            let enumeratedDevices = framework.deviceList()
+            var uniqueDeviceIdentifiers = Set<UInt>()
+            for device in enumeratedDevices {
+                guard uniqueDeviceIdentifiers.insert(UInt(bitPattern: device)).inserted else {
+                    continue
+                }
+                framework.release(device: device)
+            }
+
+            let uniqueEnumeratedDevices = uniqueDeviceIdentifiers.sorted()
             if !uniqueEnumeratedDevices.isEmpty {
                 return AvailableTrackpadSnapshot(identifiers: uniqueEnumeratedDevices)
             }

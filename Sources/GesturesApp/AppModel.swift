@@ -70,10 +70,12 @@ final class AppModel: ObservableObject {
     private let debugLog: DebugLogActions
     private let userDefaults: UserDefaults
     private let captureControlQueue = DispatchQueue(label: "com.jacobwgillespie.gestures.capture-control")
+    private let trackpadChangeMonitor: TrackpadChangeMonitor?
     private var trackpadAvailabilityTimer: Timer?
     private var lastAvailableTrackpadSnapshot = AvailableTrackpadSnapshot()
     private var hasBootstrapped = false
     private var captureRestartGeneration = 0
+    private var pendingTrackpadAvailabilityRefresh: DispatchWorkItem?
 
     private init(
         dispatcher: ShortcutDispatching? = nil,
@@ -98,6 +100,7 @@ final class AppModel: ObservableObject {
         })
         self.hapticPerformer = hapticPerformer
         self.service = service
+        self.trackpadChangeMonitor = TrackpadChangeMonitor()
         self.service.clickSuppressor = clickSuppressor
         debugLogPath = debugLog.logFilePath
 
@@ -119,6 +122,12 @@ final class AppModel: ObservableObject {
                 self.logDiagnostics(diagnostics)
             }
         }
+
+        trackpadChangeMonitor?.onChange = { [weak self] event in
+            Task { @MainActor [weak self] in
+                self?.scheduleTrackpadAvailabilityRefresh(trigger: .hardwareEvent(event))
+            }
+        }
     }
 
     func bootstrap() {
@@ -129,6 +138,7 @@ final class AppModel: ObservableObject {
         refreshLaunchAtLoginStatus()
         lastAvailableTrackpadSnapshot = service.availableTrackpadSnapshot()
         restartCapture()
+        startTrackpadChangeMonitoring()
         startTrackpadAvailabilityMonitoring()
     }
 
@@ -368,29 +378,61 @@ final class AppModel: ObservableObject {
         trackpadAvailabilityTimer?.invalidate()
         trackpadAvailabilityTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.refreshTrackpadAvailability()
+                self?.refreshTrackpadAvailability(trigger: .poll)
             }
         }
     }
 
-    private func refreshTrackpadAvailability() {
+    private func startTrackpadChangeMonitoring() {
+        guard let trackpadChangeMonitor else {
+            debugLog.append("Trackpad HID change monitor unavailable")
+            return
+        }
+
+        guard trackpadChangeMonitor.start() else {
+            debugLog.append("Trackpad HID change monitor failed to start")
+            return
+        }
+
+        debugLog.append("Trackpad HID change monitor started")
+    }
+
+    private func scheduleTrackpadAvailabilityRefresh(trigger: TrackpadAvailabilityRefreshTrigger) {
+        pendingTrackpadAvailabilityRefresh?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.refreshTrackpadAvailability(trigger: trigger)
+        }
+        pendingTrackpadAvailabilityRefresh = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + trigger.refreshDelay, execute: workItem)
+    }
+
+    private func refreshTrackpadAvailability(trigger: TrackpadAvailabilityRefreshTrigger) {
         let availableTrackpadSnapshot = service.availableTrackpadSnapshot()
-        guard availableTrackpadSnapshot != lastAvailableTrackpadSnapshot else { return }
-
         let previousTrackpadSnapshot = lastAvailableTrackpadSnapshot
-        lastAvailableTrackpadSnapshot = availableTrackpadSnapshot
-        debugLog.append(
-            """
-            Trackpad availability changed: \(describe(previousTrackpadSnapshot)) \
-            -> \(describe(availableTrackpadSnapshot))
-            """
-        )
+        let snapshotChanged = availableTrackpadSnapshot != previousTrackpadSnapshot
+        if snapshotChanged {
+            lastAvailableTrackpadSnapshot = availableTrackpadSnapshot
+            debugLog.append(
+                """
+                Trackpad availability changed (\(trigger.debugLabel)): \
+                \(describe(previousTrackpadSnapshot)) -> \(describe(availableTrackpadSnapshot))
+                """
+            )
+        }
 
-        let shouldRestartCapture = availableTrackpadSnapshot.count > 0 && !isCaptureRunning
+        let shouldRestartCapture = switch trigger {
+        case .poll:
+            snapshotChanged && availableTrackpadSnapshot.count > 0
+        case .hardwareEvent:
+            availableTrackpadSnapshot.count > 0
+        }
         guard shouldRestartCapture else { return }
 
         restartCapture(
-            reason: "trackpad became available: \(describe(previousTrackpadSnapshot)) -> \(describe(availableTrackpadSnapshot))"
+            reason: """
+            trackpad availability refresh via \(trigger.debugLabel): \
+            \(describe(previousTrackpadSnapshot)) -> \(describe(availableTrackpadSnapshot))
+            """
         )
     }
 
@@ -400,6 +442,29 @@ final class AppModel: ObservableObject {
             return "count=\(snapshot.count) ids=[\(identifiers)] fallback=default"
         }
         return "count=\(snapshot.count) ids=[\(identifiers)]"
+    }
+}
+
+private enum TrackpadAvailabilityRefreshTrigger {
+    case poll
+    case hardwareEvent(TrackpadHardwareChangeEvent)
+
+    var debugLabel: String {
+        switch self {
+        case .poll:
+            "poll"
+        case .hardwareEvent(let event):
+            "hardware-\(event.rawValue)"
+        }
+    }
+
+    var refreshDelay: TimeInterval {
+        switch self {
+        case .poll:
+            0
+        case .hardwareEvent:
+            0.35
+        }
     }
 }
 
