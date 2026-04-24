@@ -1,9 +1,37 @@
 import Foundation
 import IOKit.hid
 
-enum TrackpadHardwareChangeEvent: String {
+enum TrackpadHardwareChangeKind: String, Sendable {
     case connected = "connected"
     case disconnected = "disconnected"
+}
+
+struct TrackpadHardwareChangeEvent: Sendable {
+    let kind: TrackpadHardwareChangeKind
+}
+
+struct TrackpadHardwareSnapshot: Equatable, Sendable {
+    let devices: [TrackpadHardwareDevice]
+
+    init(devices: [TrackpadHardwareDevice] = []) {
+        self.devices = devices.sorted()
+    }
+
+    var count: Int {
+        devices.count
+    }
+}
+
+struct TrackpadHardwareDevice: Equatable, Comparable, Sendable {
+    let registryID: UInt64
+    let transport: String
+
+    static func < (lhs: TrackpadHardwareDevice, rhs: TrackpadHardwareDevice) -> Bool {
+        if lhs.registryID != rhs.registryID {
+            return lhs.registryID < rhs.registryID
+        }
+        return lhs.transport < rhs.transport
+    }
 }
 
 final class TrackpadChangeMonitor {
@@ -51,6 +79,11 @@ final class TrackpadChangeMonitor {
         return true
     }
 
+    func snapshot() -> TrackpadHardwareSnapshot {
+        let devices = copyDevices().compactMap(Self.describe)
+        return TrackpadHardwareSnapshot(devices: devices)
+    }
+
     func stop() {
         guard isRunning else { return }
         IOHIDManagerRegisterDeviceMatchingCallback(manager, nil, nil)
@@ -61,13 +94,35 @@ final class TrackpadChangeMonitor {
         suppressConnectedEventsUntil = nil
     }
 
-    private func handleChange(_ event: TrackpadHardwareChangeEvent) {
-        if event == .connected,
+    private func handleChange(_ kind: TrackpadHardwareChangeKind) {
+        if kind == .connected,
            let suppressConnectedEventsUntil,
            Date() < suppressConnectedEventsUntil {
             return
         }
-        onChange?(event)
+        onChange?(TrackpadHardwareChangeEvent(kind: kind))
+    }
+
+    private func copyDevices() -> [IOHIDDevice] {
+        guard let deviceSet = IOHIDManagerCopyDevices(manager) else {
+            return []
+        }
+
+        return (deviceSet as NSSet).map { $0 as! IOHIDDevice }
+    }
+
+    private static func describe(_ device: IOHIDDevice) -> TrackpadHardwareDevice? {
+        let service = IOHIDDeviceGetService(device)
+        var registryID: UInt64 = 0
+        guard IORegistryEntryGetRegistryEntryID(service, &registryID) == KERN_SUCCESS else {
+            return nil
+        }
+
+        let transport = IOHIDDeviceGetProperty(device, kIOHIDTransportKey as CFString) as? String
+        return TrackpadHardwareDevice(
+            registryID: registryID,
+            transport: transport ?? "unknown"
+        )
     }
 
     private static let deviceMatchingCallback: IOHIDDeviceCallback = { context, _, _, _ in

@@ -71,11 +71,10 @@ final class AppModel: ObservableObject {
     private let userDefaults: UserDefaults
     private let captureControlQueue = DispatchQueue(label: "com.jacobwgillespie.gestures.capture-control")
     private let trackpadChangeMonitor: TrackpadChangeMonitor?
-    private var trackpadAvailabilityTimer: Timer?
-    private var lastAvailableTrackpadSnapshot = AvailableTrackpadSnapshot()
+    private var lastTrackpadHardwareSnapshot = TrackpadHardwareSnapshot()
     private var hasBootstrapped = false
     private var captureRestartGeneration = 0
-    private var pendingTrackpadAvailabilityRefresh: DispatchWorkItem?
+    private var pendingTrackpadHardwareRefresh: DispatchWorkItem?
 
     private init(
         dispatcher: ShortcutDispatching? = nil,
@@ -125,7 +124,7 @@ final class AppModel: ObservableObject {
 
         trackpadChangeMonitor?.onChange = { [weak self] event in
             Task { @MainActor [weak self] in
-                self?.scheduleTrackpadAvailabilityRefresh(trigger: .hardwareEvent(event))
+                self?.scheduleTrackpadHardwareRefresh(event: event)
             }
         }
     }
@@ -136,10 +135,9 @@ final class AppModel: ObservableObject {
         debugLog.append("Application bootstrapping")
         refreshAccessibilityStatus()
         refreshLaunchAtLoginStatus()
-        lastAvailableTrackpadSnapshot = service.availableTrackpadSnapshot()
-        restartCapture()
         startTrackpadChangeMonitoring()
-        startTrackpadAvailabilityMonitoring()
+        lastTrackpadHardwareSnapshot = trackpadChangeMonitor?.snapshot() ?? TrackpadHardwareSnapshot()
+        restartCapture()
     }
 
     func refreshAccessibilityStatus() {
@@ -374,15 +372,6 @@ final class AppModel: ObservableObject {
         launchAtLoginController.isSupported
     }
 
-    private func startTrackpadAvailabilityMonitoring() {
-        trackpadAvailabilityTimer?.invalidate()
-        trackpadAvailabilityTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.refreshTrackpadAvailability(trigger: .poll)
-            }
-        }
-    }
-
     private func startTrackpadChangeMonitoring() {
         guard let trackpadChangeMonitor else {
             debugLog.append("Trackpad HID change monitor unavailable")
@@ -397,74 +386,54 @@ final class AppModel: ObservableObject {
         debugLog.append("Trackpad HID change monitor started")
     }
 
-    private func scheduleTrackpadAvailabilityRefresh(trigger: TrackpadAvailabilityRefreshTrigger) {
-        pendingTrackpadAvailabilityRefresh?.cancel()
+    private func scheduleTrackpadHardwareRefresh(event: TrackpadHardwareChangeEvent) {
+        pendingTrackpadHardwareRefresh?.cancel()
         let workItem = DispatchWorkItem { [weak self] in
-            self?.refreshTrackpadAvailability(trigger: trigger)
+            self?.refreshTrackpadHardware(event: event)
         }
-        pendingTrackpadAvailabilityRefresh = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + trigger.refreshDelay, execute: workItem)
+        pendingTrackpadHardwareRefresh = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: workItem)
     }
 
-    private func refreshTrackpadAvailability(trigger: TrackpadAvailabilityRefreshTrigger) {
-        let availableTrackpadSnapshot = service.availableTrackpadSnapshot()
-        let previousTrackpadSnapshot = lastAvailableTrackpadSnapshot
-        let snapshotChanged = availableTrackpadSnapshot != previousTrackpadSnapshot
+    private func refreshTrackpadHardware(event: TrackpadHardwareChangeEvent) {
+        guard let trackpadChangeMonitor else {
+            restartCapture(reason: "trackpad hardware event: \(event.kind.rawValue)")
+            return
+        }
+
+        let trackpadSnapshot = trackpadChangeMonitor.snapshot()
+        let previousTrackpadSnapshot = lastTrackpadHardwareSnapshot
+        let snapshotChanged = trackpadSnapshot != previousTrackpadSnapshot
         if snapshotChanged {
-            lastAvailableTrackpadSnapshot = availableTrackpadSnapshot
+            lastTrackpadHardwareSnapshot = trackpadSnapshot
             debugLog.append(
                 """
-                Trackpad availability changed (\(trigger.debugLabel)): \
-                \(describe(previousTrackpadSnapshot)) -> \(describe(availableTrackpadSnapshot))
+                Trackpad hardware changed (\(event.kind.rawValue)): \
+                \(describe(previousTrackpadSnapshot)) -> \(describe(trackpadSnapshot))
+                """
+            )
+        } else {
+            debugLog.append(
+                """
+                Trackpad hardware event (\(event.kind.rawValue)) without HID snapshot change: \
+                \(describe(trackpadSnapshot))
                 """
             )
         }
 
-        let shouldRestartCapture = switch trigger {
-        case .poll:
-            snapshotChanged && availableTrackpadSnapshot.count > 0
-        case .hardwareEvent:
-            availableTrackpadSnapshot.count > 0
-        }
-        guard shouldRestartCapture else { return }
-
         restartCapture(
             reason: """
-            trackpad availability refresh via \(trigger.debugLabel): \
-            \(describe(previousTrackpadSnapshot)) -> \(describe(availableTrackpadSnapshot))
+            trackpad hardware event \(event.kind.rawValue): \
+            \(describe(previousTrackpadSnapshot)) -> \(describe(trackpadSnapshot))
             """
         )
     }
 
-    private func describe(_ snapshot: AvailableTrackpadSnapshot) -> String {
-        let identifiers = snapshot.identifiers.map(String.init).joined(separator: ",")
-        if snapshot.isUsingDefaultDeviceFallback {
-            return "count=\(snapshot.count) ids=[\(identifiers)] fallback=default"
-        }
-        return "count=\(snapshot.count) ids=[\(identifiers)]"
-    }
-}
-
-private enum TrackpadAvailabilityRefreshTrigger {
-    case poll
-    case hardwareEvent(TrackpadHardwareChangeEvent)
-
-    var debugLabel: String {
-        switch self {
-        case .poll:
-            "poll"
-        case .hardwareEvent(let event):
-            "hardware-\(event.rawValue)"
-        }
-    }
-
-    var refreshDelay: TimeInterval {
-        switch self {
-        case .poll:
-            0
-        case .hardwareEvent:
-            0.35
-        }
+    private func describe(_ snapshot: TrackpadHardwareSnapshot) -> String {
+        let devices = snapshot.devices
+            .map { "\($0.registryID):\($0.transport)" }
+            .joined(separator: ",")
+        return "count=\(snapshot.count) devices=[\(devices)]"
     }
 }
 
