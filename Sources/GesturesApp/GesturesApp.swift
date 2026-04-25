@@ -46,5 +46,8 @@ struct GesturesApp: App {
             SettingsView(model: model)
         }
         .windowResizability(.contentSize)
+        .commands {
+            GesturesCommands(model: model)
+        }
     }
 }

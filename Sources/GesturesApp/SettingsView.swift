@@ -7,6 +7,40 @@ private enum SettingsPane: Hashable {
     case advanced
 }
 
+private enum SettingsStatusTone {
+    case positive
+    case neutral
+    case warning
+
+    var foregroundStyle: Color {
+        switch self {
+        case .positive:
+            .green
+        case .neutral:
+            .secondary
+        case .warning:
+            .orange
+        }
+    }
+}
+
+private struct SettingsStatusLabel: View {
+    let title: String
+    let systemImage: String
+    let tone: SettingsStatusTone
+
+    var body: some View {
+        Label {
+            Text(title)
+                .foregroundStyle(.primary)
+        } icon: {
+            Image(systemName: systemImage)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(tone.foregroundStyle)
+        }
+    }
+}
+
 struct SettingsView: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var store: GestureBindingStore
@@ -33,7 +67,8 @@ struct SettingsView: View {
                 advancedTab
             }
         }
-        .frame(width: 520, height: 480)
+        .controlSize(.regular)
+        .frame(width: 560, height: 520)
         .alert(
             "Reset All Gesture Defaults?",
             isPresented: $showsResetDefaultsConfirmation
@@ -70,11 +105,11 @@ struct SettingsView: View {
         Form {
             Section {
                 LabeledContent("Capture") {
-                    Label(
-                        model.isCaptureRunning ? "Running" : "Stopped",
-                        systemImage: model.isCaptureRunning ? "wave.3.right.circle.fill" : "pause.circle"
+                    SettingsStatusLabel(
+                        title: model.isCaptureRunning ? "Running" : "Stopped",
+                        systemImage: model.isCaptureRunning ? "wave.3.right.circle.fill" : "pause.circle",
+                        tone: model.isCaptureRunning ? .positive : .neutral
                     )
-                    .foregroundStyle(model.isCaptureRunning ? .green : .primary)
                 }
 
                 Text(model.captureMessage)
@@ -85,11 +120,11 @@ struct SettingsView: View {
 
             Section {
                 LabeledContent("Accessibility") {
-                    Label(
-                        model.isAccessibilityTrusted ? "Granted" : "Required",
-                        systemImage: model.isAccessibilityTrusted ? "checkmark.circle.fill" : "lock.shield"
+                    SettingsStatusLabel(
+                        title: model.isAccessibilityTrusted ? "Granted" : "Required",
+                        systemImage: model.isAccessibilityTrusted ? "checkmark.circle.fill" : "lock.shield",
+                        tone: model.isAccessibilityTrusted ? .positive : .warning
                     )
-                    .foregroundStyle(model.isAccessibilityTrusted ? .green : .primary)
                 }
 
                 HStack(spacing: 8) {
@@ -116,64 +151,63 @@ struct SettingsView: View {
     // MARK: - Gestures
 
     private var gesturesTab: some View {
-        VStack(spacing: 0) {
-            Form {
-                ForEach(GestureKind.allCases) { gesture in
-                    let configuration = store.binding(for: gesture)
+        Form {
+            ForEach(GestureKind.allCases) { gesture in
+                let configuration = store.binding(for: gesture)
 
-                    Section {
-                        Toggle("Enabled", isOn: Binding(
-                            get: { configuration.isEnabled },
-                            set: { store.setEnabled($0, for: gesture) }
-                        ))
+                Section {
+                    Toggle("Enabled", isOn: Binding(
+                        get: { configuration.isEnabled },
+                        set: { store.setEnabled($0, for: gesture) }
+                    ))
 
-                        Toggle("Haptic feedback", isOn: Binding(
-                            get: { configuration.isHapticsEnabled },
-                            set: { store.setHapticsEnabled($0, for: gesture) }
-                        ))
+                    Toggle("Haptic feedback", isOn: Binding(
+                        get: { configuration.isHapticsEnabled },
+                        set: { store.setHapticsEnabled($0, for: gesture) }
+                    ))
 
-                        Picker("Action", selection: Binding(
-                            get: { configuration.action.kind },
-                            set: { store.updateActionKind($0, for: gesture) }
-                        )) {
-                            ForEach(GestureActionKind.allCases) { actionKind in
-                                Text(actionKind.displayName).tag(actionKind)
-                            }
+                    Picker("Action", selection: Binding(
+                        get: { configuration.action.kind },
+                        set: { store.updateActionKind($0, for: gesture) }
+                    )) {
+                        ForEach(GestureActionKind.allCases) { actionKind in
+                            Text(actionKind.displayName).tag(actionKind)
                         }
-
-                        switch configuration.action {
-                        case let .keyboardShortcut(shortcut):
-                            LabeledContent("Shortcut") {
-                                ShortcutRecorder(shortcut: shortcut) { newShortcut in
-                                    store.updateShortcut(newShortcut, for: gesture)
-                                } onDelete: {
-                                    store.updateShortcut(gesture.defaultShortcutBinding, for: gesture)
-                                }
-                            }
-                        case .middleClick:
-                            LabeledContent("Output") {
-                                Text("Middle mouse button")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    } header: {
-                        Text(gesture.displayName)
-                    } footer: {
-                        Text(gesture.detail)
                     }
-                }
-            }
-            .formStyle(.grouped)
 
-            HStack {
-                Spacer()
-                Button("Reset All Gesture Defaults\u{2026}", role: .destructive) {
-                    showsResetDefaultsConfirmation = true
+                    switch configuration.action {
+                    case let .keyboardShortcut(shortcut):
+                        LabeledContent("Shortcut") {
+                            ShortcutRecorder(shortcut: shortcut) { newShortcut in
+                                store.updateShortcut(newShortcut, for: gesture)
+                            } onDelete: {
+                                store.updateShortcut(gesture.defaultShortcutBinding, for: gesture)
+                            }
+                        }
+                    case .middleClick:
+                        LabeledContent("Output") {
+                            Text("Middle mouse button")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text(gesture.displayName)
+                } footer: {
+                    Text(gesture.detail)
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 16)
+
+            Section {
+                Button(role: .destructive) {
+                    showsResetDefaultsConfirmation = true
+                } label: {
+                    Label("Reset All Gesture Defaults...", systemImage: "arrow.counterclockwise")
+                }
+            } footer: {
+                Text("Restores every gesture mapping to its default action.")
+            }
         }
+        .formStyle(.grouped)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
@@ -190,14 +224,18 @@ struct SettingsView: View {
                 Text("Keeps recent gesture history and writes a diagnostic log to disk.")
             }
 
-            Section {
-                if model.isDebugModeEnabled {
-                    Button("Open Debug Log") {
+            if model.isDebugModeEnabled {
+                Section {
+                    Button {
                         model.openDebugLog()
+                    } label: {
+                        Label("Open Debug Log", systemImage: "doc.text")
                     }
 
-                    Button("Reveal Log in Finder") {
+                    Button {
                         model.revealDebugLogInFinder()
+                    } label: {
+                        Label("Reveal Log in Finder", systemImage: "folder")
                     }
                 }
             }
